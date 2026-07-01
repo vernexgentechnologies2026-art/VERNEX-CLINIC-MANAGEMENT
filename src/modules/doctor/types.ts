@@ -1,0 +1,19 @@
+export type DoctorQueueStatus = "waiting" | "in_consultation" | "completed" | "no_show";
+export type FollowUpStatus = "due_today" | "upcoming" | "overdue" | "completed";
+export type PatientTag = "New Patient" | "Follow-up" | "Regular" | "Senior Citizen" | "Child" | "VIP";
+export type DiagnosisType = "provisional" | "final";
+
+export type DoctorStats = { waitingPatients: number; inConsultation: number; completedToday: number; followUpsDue: number; averageWaitingTime: number; prescriptionsSent: number };
+export type DoctorQueueItem = { id: string; token: string; patientId: string; patientName: string; age: number; gender: "female" | "male" | "other"; reason: string; source: string; waitingMinutes: number; previousVisit: boolean; tags: PatientTag[]; status: DoctorQueueStatus };
+export type PatientProfile = { id: string; name: string; phone: string; age: number; gender: string; bloodGroup: string; tags: PatientTag[]; lastVisit: string; allergies: string[]; conditions: string[]; medications: string[]; emergencyContact: string; totalVisits: number; pendingPayment: boolean; internalNotes: string };
+export type PatientTimelineItem = { id: string; date: string; doctor: string; diagnosis: string; prescriptionSummary: string; followUpStatus: string; paymentStatus: string };
+export type Vitals = { temperature?: string; bp?: string; pulse?: string; weight?: string; height?: string; spo2?: string; sugar?: string };
+export type Diagnosis = { name: string; notes?: string; type: DiagnosisType };
+export type ClinicalNote = { examination?: string; advice?: string; lifestyle?: string; labTests?: string; procedure?: string };
+export type ConsultationFormInput = { mainComplaint: string; symptoms?: string; duration?: string; severity?: string; notes?: string; vitals: Vitals; diagnosis: Diagnosis; clinicalNote: ClinicalNote; followUpRequired: boolean; followUpDate?: string; followUpReason?: string };
+export type Medicine = { id: string; name: string; form: string };
+export type PrescriptionItem = { id: string; medicineName: string; dosage: string; frequency: string; timing: string; duration: string; instructions?: string; quantity?: string };
+export type Prescription = { id: string; patientId: string; doctorName: string; diagnosis: string; date: string; items: PrescriptionItem[]; advice?: string; dietAdvice?: string; avoidItems?: string; restNote?: string; labTests: string[]; followUpDate?: string };
+export type PrescriptionTemplate = { id: string; name: string; medicines: PrescriptionItem[]; advice: string };
+export type LabTest = { id: string; name: string; selected?: boolean };
+export type FollowUp = { id: string; patientId: string; patientName: string; phone: string; lastDiagnosis: string; followUpDate: string; reason: string; status: FollowUpStatus; reminderStatus: string };

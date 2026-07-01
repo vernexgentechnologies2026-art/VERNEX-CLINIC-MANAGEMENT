@@ -1,0 +1,4 @@
+import { Button } from "../../../components/ui";
+import type { BookingService } from "../types";
+import { rupee } from "../utils";
+export function ServiceSelector({ services, selectedId, onSelect }: { services: BookingService[]; selectedId: string; onSelect: (id: string) => void }) { return <div className="grid gap-3 md:grid-cols-2">{services.map((s) => <button key={s.id} onClick={() => onSelect(s.id)} className={`rounded-3xl border bg-white p-4 text-left transition ${selectedId === s.id ? "border-brand-500 ring-2 ring-brand-500/20" : "hover:border-brand-300"}`}><h3 className="font-bold">{s.name}</h3><p className="mt-1 text-sm text-slate-500">{s.description}</p><div className="mt-4 flex items-center justify-between"><span className="text-sm text-slate-500">{s.duration} · <b className="text-slate-900">{rupee(s.price)}</b></span><Button className="min-h-8 px-3 py-1">{selectedId === s.id ? "Selected" : "Select"}</Button></div></button>)}</div>; }

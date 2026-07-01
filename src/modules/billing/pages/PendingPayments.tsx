@@ -1,0 +1,5 @@
+import { useState } from "react";
+import { Button, Input, Modal, PageHeader, Select, Textarea } from "../../../components/ui";
+import { getPendingPayments } from "../../../services/billing.service";
+import { PendingPaymentCard } from "../components/PendingPaymentCard";
+export default function PendingPayments() { const [open, setOpen] = useState(false); return <div className="space-y-5"><PageHeader title="Pending Payments" description="Collect balances, send reminders, and record payment placeholders." action={<Button onClick={() => setOpen(true)}>Record Payment</Button>} /><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{getPendingPayments().map((p) => <PendingPaymentCard key={p.id} payment={p} />)}</div><Modal open={open} onClose={() => setOpen(false)} title="Add Payment"><div className="space-y-3"><Input type="number" placeholder="Amount received" /><Select><option>UPI</option><option>Cash</option><option>Card</option><option>Online Link</option></Select><Input type="date" defaultValue="2026-07-01" /><Textarea placeholder="Notes" /><Button onClick={() => setOpen(false)}>Save payment</Button></div></Modal></div>; }

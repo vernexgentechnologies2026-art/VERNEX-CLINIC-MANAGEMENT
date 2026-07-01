@@ -1,0 +1,43 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import Login from "../pages/auth/Login";
+import ProtectedRoute from "./ProtectedRoute";
+import { AppLayout } from "../components/layout/AppLayout";
+import OwnerDashboard from "../pages/owner/OwnerDashboard";
+import ReceptionDashboard from "../modules/reception/pages/ReceptionDashboard";
+import ReceptionAppointments from "../modules/reception/pages/Appointments";
+import ReceptionQueue from "../modules/reception/pages/Queue";
+import ReceptionNewPatient from "../modules/reception/pages/NewPatient";
+import ReceptionBilling from "../modules/reception/pages/BillingShortcut";
+import DoctorQueue from "../modules/doctor/pages/DoctorQueue";
+import DoctorPatientProfile from "../modules/doctor/pages/PatientProfile";
+import DoctorConsultation from "../modules/doctor/pages/Consultation";
+import DoctorPrescription from "../modules/doctor/pages/Prescription";
+import DoctorFollowUps from "../modules/doctor/pages/FollowUps";
+import PharmacyDashboard from "../modules/pharmacy/pages/PharmacyDashboard";
+import PharmacyPrescriptions from "../modules/pharmacy/pages/PrescriptionQueue";
+import PharmacyStock from "../modules/pharmacy/pages/MedicineStock";
+import PharmacyBilling from "../modules/pharmacy/pages/PharmacyBilling";
+import PharmacyPurchaseEntry from "../modules/pharmacy/pages/PurchaseEntry";
+import PharmacyLowStock from "../modules/pharmacy/pages/LowStock";
+import PharmacyExpiryAlerts from "../modules/pharmacy/pages/ExpiryAlerts";
+import BillingDashboard from "../modules/billing/pages/BillingDashboard";
+import BillingCreate from "../modules/billing/pages/CreateBill";
+import BillingInvoices from "../modules/billing/pages/Invoices";
+import BillingReceipts from "../modules/billing/pages/Receipts";
+import BillingPendingPayments from "../modules/billing/pages/PendingPayments";
+import BillingRefunds from "../modules/billing/pages/Refunds";
+import BillingReports from "../modules/billing/pages/Reports";
+import ClinicBookingPage from "../modules/patient-booking/pages/ClinicBookingPage";
+import BookingFlow from "../modules/patient-booking/pages/BookingFlow";
+import AppointmentSuccess from "../modules/patient-booking/pages/AppointmentSuccess";
+import BookingStatus from "../modules/patient-booking/pages/BookingStatus";
+import WhatsAppBookingDashboard from "../modules/whatsapp-booking/pages/WhatsAppBookingDashboard";
+import WhatsAppBookingSimulator from "../modules/whatsapp-booking/pages/WhatsAppBookingSimulator";
+import WhatsAppTemplates from "../modules/whatsapp-booking/pages/WhatsAppTemplates";
+import WhatsAppConversations from "../modules/whatsapp-booking/pages/WhatsAppConversations";
+import WhatsAppBookingSettings from "../modules/whatsapp-booking/pages/WhatsAppBookingSettings";
+import SuperAdminDashboard from "../pages/super-admin/SuperAdminDashboard";
+import PlaceholderPage from "../pages/shared/PlaceholderPage";
+export default function AppRoutes(){return <Routes><Route path="/" element={<Navigate to="/login" replace/>}/><Route path="/login" element={<Login/>}/><Route path="/book/:clinicSlug" element={<ClinicBookingPage/>}/><Route path="/book/:clinicSlug/flow" element={<BookingFlow/>}/><Route path="/book/:clinicSlug/success" element={<AppointmentSuccess/>}/><Route path="/booking/status" element={<BookingStatus/>}/>
+ <Route element={<ProtectedRoute/>}><Route element={<AppLayout/>}><Route path="/owner/dashboard" element={<OwnerDashboard/>}/><Route path="/reception/dashboard" element={<ReceptionDashboard/>}/><Route path="/reception/appointments" element={<ReceptionAppointments/>}/><Route path="/reception/queue" element={<ReceptionQueue/>}/><Route path="/reception/new-patient" element={<ReceptionNewPatient/>}/><Route path="/reception/billing" element={<ReceptionBilling/>}/><Route path="/doctor/queue" element={<DoctorQueue/>}/><Route path="/doctor/patient/:id" element={<DoctorPatientProfile/>}/><Route path="/doctor/consultation/:patientId" element={<DoctorConsultation/>}/><Route path="/doctor/prescription/:patientId" element={<DoctorPrescription/>}/><Route path="/doctor/follow-ups" element={<DoctorFollowUps/>}/><Route path="/pharmacy/dashboard" element={<PharmacyDashboard/>}/><Route path="/pharmacy/prescriptions" element={<PharmacyPrescriptions/>}/><Route path="/pharmacy/stock" element={<PharmacyStock/>}/><Route path="/pharmacy/billing" element={<PharmacyBilling/>}/><Route path="/pharmacy/purchase-entry" element={<PharmacyPurchaseEntry/>}/><Route path="/pharmacy/low-stock" element={<PharmacyLowStock/>}/><Route path="/pharmacy/expiry-alerts" element={<PharmacyExpiryAlerts/>}/><Route path="/billing/dashboard" element={<BillingDashboard/>}/><Route path="/billing/create" element={<BillingCreate/>}/><Route path="/billing/invoices" element={<BillingInvoices/>}/><Route path="/billing/receipts" element={<BillingReceipts/>}/><Route path="/billing/pending-payments" element={<BillingPendingPayments/>}/><Route path="/billing/refunds" element={<BillingRefunds/>}/><Route path="/billing/reports" element={<BillingReports/>}/><Route path="/whatsapp-booking/dashboard" element={<WhatsAppBookingDashboard/>}/><Route path="/whatsapp-booking/simulator" element={<WhatsAppBookingSimulator/>}/><Route path="/whatsapp-booking/templates" element={<WhatsAppTemplates/>}/><Route path="/whatsapp-booking/conversations" element={<WhatsAppConversations/>}/><Route path="/whatsapp-booking/settings" element={<WhatsAppBookingSettings/>}/><Route path="/super-admin/dashboard" element={<SuperAdminDashboard/>}/>
+ <Route path="/owner/*" element={<PlaceholderPage/>}/><Route path="/reception/*" element={<PlaceholderPage/>}/><Route path="/doctor/*" element={<PlaceholderPage/>}/><Route path="/pharmacy/*" element={<PlaceholderPage/>}/><Route path="/patient/*" element={<PlaceholderPage/>}/><Route path="/super-admin/*" element={<PlaceholderPage/>}/></Route></Route><Route path="*" element={<Navigate to="/login" replace/>}/></Routes>}

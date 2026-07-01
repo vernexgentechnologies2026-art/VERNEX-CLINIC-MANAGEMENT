@@ -1,0 +1,2 @@
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+export function RevenueChart({ data }: { data: { date: string; revenue: number }[] }) { return <div className="h-72"><ResponsiveContainer width="100%" height="100%"><AreaChart data={data}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="date" /><YAxis /><Tooltip /><Area type="monotone" dataKey="revenue" stroke="#087f8c" fill="#ccfbf1" /></AreaChart></ResponsiveContainer></div>; }

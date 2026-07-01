@@ -1,0 +1,10 @@
+import { conversations, flowSteps, settings, simulation, templates, whatsappStats } from "../modules/whatsapp-booking/mock";
+import type { WhatsAppTemplate } from "../modules/whatsapp-booking/types";
+export const getWhatsAppBookingStats = () => whatsappStats;
+export const getWhatsAppFlowSteps = () => flowSteps;
+export const getWhatsAppTemplates = () => templates;
+export const getWhatsAppConversations = () => conversations;
+export const getConversationById = (id: string) => conversations.find((c) => c.id === id) ?? conversations[0];
+export const simulateWhatsAppBooking = () => simulation;
+export const updateWhatsAppTemplate = (input: Partial<WhatsAppTemplate>) => ({ ...templates[0], ...input });
+export const getWhatsAppSettings = () => settings;
