@@ -1,5 +1,25 @@
 export const statusColors: Record<string, string> = {
-  booked: "bg-blue-50 text-blue-700", arrived: "bg-violet-50 text-violet-700", waiting: "bg-amber-50 text-amber-700",
-  in_consultation: "bg-cyan-50 text-cyan-700", completed: "bg-emerald-50 text-emerald-700", cancelled: "bg-rose-50 text-rose-700",
-  no_show: "bg-slate-100 text-slate-600", paid: "bg-emerald-50 text-emerald-700", pending: "bg-amber-50 text-amber-700"
+  booked: "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
+  arrived: "bg-violet-50 text-violet-700 ring-1 ring-violet-100",
+  waiting: "bg-amber-50 text-amber-700 ring-1 ring-amber-100",
+  in_consultation: "bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100",
+  completed: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+  cancelled: "bg-rose-50 text-rose-700 ring-1 ring-rose-100",
+  no_show: "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
+  paid: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+  pending: "bg-amber-50 text-amber-700 ring-1 ring-amber-100",
+  partial: "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
+  refunded: "bg-slate-100 text-slate-700 ring-1 ring-slate-200",
+  queued: "bg-slate-100 text-slate-700 ring-1 ring-slate-200",
+  sent: "bg-blue-50 text-blue-700 ring-1 ring-blue-100",
+  delivered: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+  read: "bg-brand-50 text-brand-700 ring-1 ring-brand-100",
+  failed: "bg-rose-50 text-rose-700 ring-1 ring-rose-100",
+  active: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+  paused: "bg-amber-50 text-amber-700 ring-1 ring-amber-100",
+  in_stock: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+  low_stock: "bg-amber-50 text-amber-700 ring-1 ring-amber-100",
+  out_of_stock: "bg-rose-50 text-rose-700 ring-1 ring-rose-100",
+  expiring_soon: "bg-amber-50 text-amber-700 ring-1 ring-amber-100",
+  expired: "bg-rose-50 text-rose-700 ring-1 ring-rose-100"
 };

@@ -1,5 +1,5 @@
-import { doctorQueue, doctorStats, favoriteMedicines, followUps, labTests, patientProfiles, prescriptions, prescriptionTemplates, timeline } from "../modules/doctor/mock";
-import type { ConsultationFormInput, Prescription } from "../modules/doctor/types";
+import { doctorAvailability, doctorQueue, doctorStats, favoriteMedicines, followUps, labTests, medicineReminderSchedules, patientProfiles, prescriptions, prescriptionTemplates, timeline } from "../modules/doctor/mock";
+import type { ConsultationFormInput, DoctorAvailability, MedicineReminderInput, Prescription, ReminderStatus } from "../modules/doctor/types";
 
 export const getDoctorStats = () => doctorStats;
 export const getDoctorQueue = () => doctorQueue;
@@ -11,7 +11,17 @@ export const completeConsultation = (id: string) => ({ id, status: "completed" a
 export const getPrescriptionTemplates = () => prescriptionTemplates;
 export const getFavoriteMedicines = () => favoriteMedicines;
 export const createPrescription = (input: Partial<Prescription>) => ({ ...prescriptions[0], ...input, id: `rx-${Date.now()}` });
+export const sendPrescriptionToWhatsApp = (input: { prescriptionId: string; patientId: string }) => ({ ...input, status: "sent_to_whatsapp" as const, deliveryStatus: "queued" as const });
 export const scheduleFollowUp = (input: unknown) => ({ id: `fu-${Date.now()}`, input });
 export const getLabTests = () => labTests;
 export const getFollowUps = () => followUps;
 export const getPastPrescriptions = () => prescriptions;
+export const getDoctorAvailability = () => doctorAvailability;
+export const updateDoctorAvailability = (input: Partial<DoctorAvailability>) => ({ ...doctorAvailability, ...input });
+export const getAvailableSlots = () => ["09:30 AM", "09:45 AM", "10:00 AM", "10:30 AM", "12:00 PM", "05:00 PM"];
+export const blockDoctorDate = (input: { date: string; reason: string; emergencyLeave?: boolean }) => ({ ...input, blocked: true });
+export const getPatientByAppointment = (appointmentId: string) => ({ appointmentId, patient: patientProfiles[0] });
+export const createMedicineReminderSchedule = (items: MedicineReminderInput[]) => ({ id: `rem-${Date.now()}`, items, status: "active" as const });
+export const updateReminderStatus = (id: string, status: ReminderStatus) => ({ id, status });
+export const scheduleFollowUpReminder = (input: unknown) => ({ id: `fu-rem-${Date.now()}`, input, deliveryStatus: "queued" as const });
+export const getMedicineReminderSchedules = () => medicineReminderSchedules;

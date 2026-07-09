@@ -1,9 +1,10 @@
-import type { DoctorQueueItem, DoctorStats, FollowUp, LabTest, Medicine, PatientProfile, PatientTimelineItem, Prescription, PrescriptionTemplate } from "./types";
+import { confirmedWhatsappAppointment } from "../whatsapp-booking/mock";
+import type { DoctorAvailability, DoctorQueueItem, DoctorStats, FollowUp, LabTest, Medicine, MedicineReminderSchedule, PatientProfile, PatientTimelineItem, Prescription, PrescriptionTemplate } from "./types";
 
 export const doctorName = "Dr. Priya Sharma";
 export const doctorStats: DoctorStats = { waitingPatients: 7, inConsultation: 1, completedToday: 14, followUpsDue: 5, averageWaitingTime: 16, prescriptionsSent: 12 };
 export const doctorQueue: DoctorQueueItem[] = [
-  { id: "q1", token: "A009", patientId: "p1", patientName: "Neha Iyer", age: 31, gender: "female", reason: "Fever and throat pain", source: "WhatsApp", waitingMinutes: 18, previousVisit: true, tags: ["Regular"], status: "waiting" },
+  { id: "q-wa-1", token: confirmedWhatsappAppointment.tokenNumber, appointmentId: confirmedWhatsappAppointment.appointmentId, tokenNumber: confirmedWhatsappAppointment.tokenNumber, patientId: "p1", patientName: confirmedWhatsappAppointment.patientName, phone: confirmedWhatsappAppointment.phone, whatsappNumber: confirmedWhatsappAppointment.whatsappNumber, age: confirmedWhatsappAppointment.age, gender: confirmedWhatsappAppointment.gender, department: confirmedWhatsappAppointment.department, doctorId: confirmedWhatsappAppointment.doctorId, doctorName: confirmedWhatsappAppointment.doctorName, appointmentDate: confirmedWhatsappAppointment.appointmentDate, appointmentTime: confirmedWhatsappAppointment.appointmentTime, mainProblem: confirmedWhatsappAppointment.mainProblem, reason: confirmedWhatsappAppointment.mainProblem, source: "whatsapp", waitingMinutes: 3, previousVisit: !confirmedWhatsappAppointment.isNewPatient, isNewPatient: confirmedWhatsappAppointment.isNewPatient, reminderStatus: confirmedWhatsappAppointment.reminderStatus, tags: ["Regular"], status: "waiting" },
   { id: "q2", token: "A012", patientId: "p2", patientName: "Ramesh Gupta", age: 62, gender: "male", reason: "BP review", source: "Phone call", waitingMinutes: 11, previousVisit: true, tags: ["Senior Citizen", "Follow-up"], status: "in_consultation" },
   { id: "q3", token: "A015", patientId: "p3", patientName: "Meera Patel", age: 8, gender: "female", reason: "Cough and mild fever", source: "Walk-in", waitingMinutes: 7, previousVisit: false, tags: ["Child", "New Patient"], status: "waiting" },
   { id: "q4", token: "A018", patientId: "p4", patientName: "Kavya Reddy", age: 28, gender: "female", reason: "Skin allergy follow-up", source: "QR booking", waitingMinutes: 0, previousVisit: true, tags: ["VIP", "Follow-up"], status: "completed" }
@@ -31,7 +32,19 @@ export const prescriptionTemplates: PrescriptionTemplate[] = [
 export const labTests: LabTest[] = ["CBC", "Blood Sugar", "Thyroid Profile", "Vitamin D", "X-Ray", "Skin Patch Test", "Dental X-Ray"].map((name, i) => ({ id: `l${i}`, name }));
 export const prescriptions: Prescription[] = [{ id: "pRx1", patientId: "p1", doctorName, diagnosis: "Viral fever", date: "18 Jun 2026", items: [med("i1", "Paracetamol 500mg")], advice: "Rest and fluids", labTests: ["CBC"], followUpDate: "25 Jun 2026" }];
 export const followUps: FollowUp[] = [
-  { id: "f1", patientId: "p1", patientName: "Neha Iyer", phone: "+91 98765 43210", lastDiagnosis: "Viral fever", followUpDate: "2026-07-01", reason: "Check fever trend", status: "due_today", reminderStatus: "WhatsApp draft ready" },
-  { id: "f2", patientId: "p2", patientName: "Ramesh Gupta", phone: "+91 90000 11122", lastDiagnosis: "Hypertension", followUpDate: "2026-06-29", reason: "BP review", status: "overdue", reminderStatus: "Reminder pending" },
-  { id: "f3", patientId: "p4", patientName: "Kavya Reddy", phone: "+91 98877 44556", lastDiagnosis: "Skin allergy", followUpDate: "2026-07-04", reason: "Review rash", status: "upcoming", reminderStatus: "Scheduled" }
+  { id: "f1", patientId: "p1", patientName: "Neha Iyer", phone: "+91 98765 43210", lastDiagnosis: "Viral fever", followUpDate: "2026-07-11", reason: "Check fever trend", status: "due_today", reminderStatus: "WhatsApp reminder queued", whatsappDeliveryStatus: "queued", sentDate: "2026-07-09", patientResponseStatus: "no_response" },
+  { id: "f2", patientId: "p2", patientName: "Ramesh Gupta", phone: "+91 90000 11122", lastDiagnosis: "Hypertension", followUpDate: "2026-07-12", reason: "BP review", status: "overdue", reminderStatus: "Reminder delivered", whatsappDeliveryStatus: "delivered", sentDate: "2026-07-08", patientResponseStatus: "confirmed" },
+  { id: "f3", patientId: "p4", patientName: "Kavya Reddy", phone: "+91 98877 44556", lastDiagnosis: "Skin allergy", followUpDate: "2026-07-14", reason: "Review rash", status: "upcoming", reminderStatus: "Scheduled", whatsappDeliveryStatus: "sent", sentDate: "2026-07-09", patientResponseStatus: "wants_reschedule" }
+];
+
+export const doctorAvailability: DoctorAvailability = {
+  doctorId: "doc-priya",
+  weekly: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day) => ({ day, enabled: day !== "Saturday", startTime: "09:30", endTime: "17:30", breakTime: "13:00-14:00", slotDurationMinutes: 15, maxAppointmentsPerSlot: 1, maxAppointmentsPerDay: 28 })),
+  blockedDates: [{ date: "2026-07-16", reason: "Conference" }, { date: "2026-07-20", reason: "Emergency leave", emergencyLeave: true }]
+};
+
+export const medicineReminderSchedules: MedicineReminderSchedule[] = [
+  { id: "rem-1", patientName: "Neha Iyer", phone: "+91 98765 43210", prescriptionId: "pRx1", activeMedicines: ["Paracetamol 500mg", "ORS"], nextReminder: "Today 8:00 PM", duration: "3 days", consent: "confirmed", status: "active" },
+  { id: "rem-2", patientName: "Ramesh Gupta", phone: "+91 90000 11122", prescriptionId: "pRx2", activeMedicines: ["Telmisartan"], nextReminder: "Tomorrow 8:00 AM", duration: "30 days", consent: "confirmed", status: "paused" },
+  { id: "rem-3", patientName: "Kavya Reddy", phone: "+91 98877 44556", prescriptionId: "pRx3", activeMedicines: ["Cetirizine 10mg"], nextReminder: "Completed", duration: "5 days", consent: "not_received", status: "completed" }
 ];
