@@ -1,0 +1,23 @@
+import { confirmedWhatsappAppointment, conversations, departmentLabel, departments, doctorAvailability, flowSteps, settings, simulationByMode, templates, whatsappDoctors, whatsappStats } from "../modules/whatsapp-booking/mock";
+import type { ClinicDepartment, ClinicMode, WhatsAppTemplate } from "../modules/whatsapp-booking/types";
+export const getWhatsAppBookingStats = () => whatsappStats;
+export const getWhatsAppFlowSteps = () => flowSteps;
+export const getWhatsAppTemplates = () => templates;
+export const getWhatsAppConversations = () => conversations;
+export const getConversationById = (id: string) => conversations.find((c) => c.id === id) ?? conversations[0];
+export const simulateWhatsAppBooking = (mode: ClinicMode = settings.clinicMode) => simulationByMode[mode];
+export const updateWhatsAppTemplate = (input: Partial<WhatsAppTemplate>) => ({ ...templates[0], ...input });
+export const getWhatsAppSettings = () => settings;
+export const getClinicWhatsAppSettings = () => settings;
+export const getClinicDepartments = () => departments.map((id) => ({ id, label: departmentLabel[id] }));
+export const getDoctorsByDepartment = (department: ClinicDepartment) => whatsappDoctors.filter((doctor) => doctor.department === department);
+export const getDoctorAvailableSlots = (doctorId: string, date?: string) => {
+  const availability = doctorAvailability.find((item) => item.doctorId === doctorId) ?? doctorAvailability[0];
+  return date ? availability.dates.find((item) => item.date === date)?.slots ?? [] : availability.dates.flatMap((item) => item.slots);
+};
+export const getWhatsAppConversation = (id = "c1") => getConversationById(id);
+export const findPatientByWhatsAppNumber = (number: string) => number === confirmedWhatsappAppointment.whatsappNumber ? { id: "p1", fullName: confirmedWhatsappAppointment.patientName, whatsappNumber: number } : null;
+export const createPatientFromWhatsApp = (input: unknown) => ({ id: `p-wa-${Date.now()}`, source: "whatsapp" as const, input });
+export const createAppointmentFromWhatsApp = () => confirmedWhatsappAppointment;
+export const sendBookingConfirmation = (appointmentId: string) => ({ appointmentId, deliveryStatus: "queued" as const });
+export const transferConversationToReception = (conversationId: string) => ({ conversationId, status: "transferred_to_reception" as const });

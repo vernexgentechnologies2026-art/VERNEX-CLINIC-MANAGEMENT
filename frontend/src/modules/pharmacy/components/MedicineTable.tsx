@@ -1,0 +1,6 @@
+import { Button } from "../../../components/ui";
+import type { Medicine } from "../types";
+import { rupee } from "../utils";
+import { MedicineStockCard } from "./MedicineStockCard";
+import { StockStatusBadge } from "./StockStatusBadge";
+export function MedicineTable({ medicines }: { medicines: Medicine[] }) { return <><div className="grid gap-3 md:hidden">{medicines.map((m) => <MedicineStockCard key={m.id} medicine={m} />)}</div><div className="table-wrap hidden md:block"><table className="data-table"><thead><tr><th>Medicine</th><th>Category</th><th>Batch</th><th>Expiry</th><th>Stock</th><th>Reorder</th><th>Purchase</th><th>Selling</th><th>MRP</th><th>Supplier</th><th>Status</th><th>Actions</th></tr></thead><tbody>{medicines.map((m) => <tr key={m.id}><td><b>{m.name}</b><p className="text-xs text-slate-400">{m.genericName}</p></td><td>{m.category}</td><td>{m.batchNumber}</td><td>{m.expiryDate}</td><td className="font-bold">{m.currentStock}</td><td>{m.reorderLevel}</td><td>{rupee(m.purchasePrice)}</td><td>{rupee(m.sellingPrice)}</td><td>{rupee(m.mrp)}</td><td>{m.supplier}</td><td><StockStatusBadge status={m.stockStatus} /></td><td><div className="flex gap-2"><Button variant="secondary" className="min-h-8 px-3 py-1">Edit</Button><Button variant="ghost" className="min-h-8 px-3 py-1">Adjust</Button></div></td></tr>)}</tbody></table></div></>; }
