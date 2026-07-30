@@ -1,0 +1,4 @@
+import type { PaymentStatus, RefundStatus } from "../types";
+import { paymentStatusLabel, refundStatusLabel } from "../utils";
+export function PaymentStatusBadge({ status }: { status: PaymentStatus }) { const tone = status === "paid" ? "bg-emerald-50 text-emerald-700" : status === "pending" ? "bg-amber-50 text-amber-700" : status === "partial" ? "bg-blue-50 text-blue-700" : "bg-rose-50 text-rose-700"; return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${tone}`}>{paymentStatusLabel[status]}</span>; }
+export function RefundStatusBadge({ status }: { status: RefundStatus }) { const tone = status === "processed" ? "bg-emerald-50 text-emerald-700" : status === "rejected" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"; return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${tone}`}>{refundStatusLabel[status]}</span>; }

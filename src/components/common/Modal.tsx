@@ -1,0 +1,7 @@
+import { useEffect, type ReactNode } from "react";
+import { X } from "lucide-react";
+export function Modal({ open, title, description, footer, onClose, children }: { open: boolean; title: string; description?: string; footer?: ReactNode; onClose: () => void; children: ReactNode }) {
+  useEffect(() => { if (!open) return; const close = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); }; window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close); }, [open, onClose]);
+  if (!open) return null;
+  return <div className="fixed inset-0 z-50 grid place-items-end bg-slate-950/35 p-0 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="card flex max-h-[92vh] w-full flex-col rounded-b-none p-0 shadow-popover sm:max-w-lg sm:rounded-card"><div className="flex items-start justify-between gap-4 border-b px-5 py-4"><div><h2 id="modal-title" className="text-lg font-bold text-slate-950">{title}</h2>{description && <p className="mt-1 text-sm text-slate-500">{description}</p>}</div><button className="tap-target rounded-lg text-slate-500 hover:bg-slate-100" onClick={onClose} aria-label="Close dialog"><X className="mx-auto size-5" /></button></div><div className="overflow-y-auto px-5 py-4">{children}</div>{footer && <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t bg-white px-5 py-4">{footer}</div>}</div></div>;
+}
