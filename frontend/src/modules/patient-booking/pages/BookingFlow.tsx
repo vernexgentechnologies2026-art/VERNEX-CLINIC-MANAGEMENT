@@ -1,0 +1,22 @@
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Button, Card } from "../../../components/ui";
+import { createBooking, getAvailableDates, getAvailableSlots, getClinicBookingProfile, getDoctors, getServices } from "../../../services/patientBooking.service";
+import { BookingStepper } from "../components/BookingStepper";
+import { BookingSummary } from "../components/BookingSummary";
+import { DateSelector } from "../components/DateSelector";
+import { DoctorSelector } from "../components/DoctorSelector";
+import { PatientDetailsForm } from "../components/PatientDetailsForm";
+import { PaymentOptionCard } from "../components/PaymentOptionCard";
+import { ServiceSelector } from "../components/ServiceSelector";
+import { SlotSelector } from "../components/SlotSelector";
+import type { PatientBookingInput, PaymentOption } from "../types";
+
+const defaultPatient: PatientBookingInput = { fullName: "", phone: "", age: 28, gender: "", reason: "", existingPatient: false, patientId: "", notes: "" };
+export default function BookingFlow() {
+  const navigate = useNavigate(); const clinic = getClinicBookingProfile(); const doctors = getDoctors(); const services = getServices(); const dates = getAvailableDates(); const slots = getAvailableSlots();
+  const [step, setStep] = useState(0); const [doctorId, setDoctorId] = useState(doctors[0].id); const [serviceId, setServiceId] = useState(services[0].id); const [dateId, setDateId] = useState(dates[0].id); const [slotId, setSlotId] = useState(slots[0].id); const [patient, setPatient] = useState<PatientBookingInput>(defaultPatient); const [payment, setPayment] = useState<PaymentOption>("pay_at_clinic");
+  const doctor = doctors.find((d) => d.id === doctorId)!; const service = services.find((s) => s.id === serviceId)!; const date = dates.find((d) => d.id === dateId)!; const slot = slots.find((s) => s.id === slotId)!;
+  const next = () => setStep((s) => Math.min(4, s + 1)); const back = () => setStep((s) => Math.max(0, s - 1));
+  return <main className="min-h-screen bg-[#f7f9fa] px-4 py-5"><div className="mx-auto max-w-5xl space-y-5"><div className="flex items-center justify-between"><Link className="text-sm font-bold text-slate-500" to={`/book/${clinic.slug}`}>← Back to clinic</Link><Link className="text-sm font-bold text-brand-700" to="/booking/status">Check booking status</Link></div><Card className="p-5"><BookingStepper current={step} /></Card><div className="grid gap-5 lg:grid-cols-[1fr_320px]"><Card className="p-5">{step === 0 && <><h1 className="mb-4 text-xl font-bold">Choose Doctor</h1><DoctorSelector doctors={doctors} selectedId={doctorId} onSelect={setDoctorId} /></>}{step === 1 && <><h1 className="mb-4 text-xl font-bold">Select Service</h1><ServiceSelector services={services} selectedId={serviceId} onSelect={setServiceId} /></>}{step === 2 && <div className="space-y-5"><h1 className="text-xl font-bold">Pick Date & Time</h1><DateSelector dates={dates} selectedId={dateId} onSelect={setDateId} /><SlotSelector slots={slots} selectedId={slotId} onSelect={setSlotId} /></div>}{step === 3 && <><h1 className="mb-4 text-xl font-bold">Enter Patient Details</h1><PatientDetailsForm defaultValue={patient} onSubmit={(input) => { setPatient(input); next(); }} /></>}{step === 4 && <div className="space-y-5"><h1 className="text-xl font-bold">Confirm Appointment</h1><div className="grid gap-3 sm:grid-cols-2"><PaymentOptionCard option="pay_at_clinic" selected={payment === "pay_at_clinic"} onSelect={() => setPayment("pay_at_clinic")} /><PaymentOptionCard option="pay_online" selected={payment === "pay_online"} onSelect={() => setPayment("pay_online")} /></div><BookingSummary clinic={clinic} doctor={doctor} service={service} date={date} slot={slot} patient={patient} paymentOption={payment} /><Button className="w-full" onClick={() => { createBooking({ clinic, doctor, service, date, slot, patient, paymentOption: payment }); navigate(`/book/${clinic.slug}/success`); }}>Confirm Appointment</Button></div>}<div className="mt-5 flex flex-wrap gap-2">{step > 0 && <Button variant="secondary" onClick={back}>Back</Button>}{step < 3 && <Button onClick={next}>Continue</Button>}{step < 4 && <Button variant="ghost" onClick={() => setStep(0)}>Reset</Button>}</div></Card><aside className="lg:sticky lg:top-5 lg:self-start"><BookingSummary clinic={clinic} doctor={doctor} service={service} date={date} slot={slot} patient={patient} paymentOption={payment} /></aside></div></div></main>;
+}

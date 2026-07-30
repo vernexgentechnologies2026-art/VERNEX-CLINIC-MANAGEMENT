@@ -1,0 +1,15 @@
+.env
+.env.local
+.env.*.local
+!.env.example
+
+supabase/.temp/
+frontend/supabase/.temp/
+*.tsbuildinfo
+.env
+.env.local
+frontend/.env
+frontend/.env.local
+node_modules/
+dist/
+.vercel/
