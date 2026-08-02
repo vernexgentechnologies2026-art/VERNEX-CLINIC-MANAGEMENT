@@ -1,5 +1,0 @@
-import { Button } from "../../../components/ui";
-import type { PendingPayment } from "../types";
-import { rupee } from "../utils";
-import { PaymentStatusBadge } from "./PaymentStatusBadge";
-export function PendingPaymentCard({ payment }: { payment: PendingPayment }) { return <div className="card p-4"><div className="flex justify-between gap-3"><div><h3 className="font-bold">{payment.patientName}</h3><p className="text-sm text-slate-500">{payment.phone} · {payment.invoiceNumber}</p></div><PaymentStatusBadge status={payment.paymentStatus} /></div><div className="mt-3 grid grid-cols-3 gap-2 text-sm"><p>Total <b>{rupee(payment.totalAmount)}</b></p><p>Paid <b>{rupee(payment.paidAmount)}</b></p><p>Balance <b className="text-amber-700">{rupee(payment.balance)}</b></p></div><p className="mt-2 text-xs text-slate-500">Due since {payment.dueSince} · {payment.lastReminder}</p><div className="mt-4 flex flex-wrap gap-2"><Button>Record Payment</Button><Button variant="secondary">Send Payment Link</Button><Button variant="secondary">WhatsApp Reminder</Button><Button variant="ghost">View Invoice</Button></div></div>; }
