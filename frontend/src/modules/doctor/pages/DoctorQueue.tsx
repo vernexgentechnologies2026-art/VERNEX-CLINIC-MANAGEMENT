@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { Stethoscope } from "lucide-react";
 import { toast } from "sonner";
 import { Button, PageHeader } from "../../../components/ui";
@@ -54,7 +55,7 @@ export default function DoctorQueue() {
 
   const whatsappAppointment = queue.find((item) => item.source.toLowerCase() === "whatsapp");
 
-  return <div className="space-y-5"><PageHeader title="Good morning, Doctor" description={`${doctorName} - ${clinicName} - Active queue`} action={<Button icon={<Stethoscope className="size-4" />} loading={loading} onClick={() => void loadQueue()}>Refresh Queue</Button>} />{whatsappAppointment && <div className="rounded-2xl border border-brand-200 bg-brand-50 p-4"><p className="text-xs font-bold uppercase text-brand-700">New WhatsApp Appointment</p><div className="mt-2 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-brand-950">{whatsappAppointment.patientName}</h2><p className="text-sm text-brand-800">{whatsappAppointment.department?.replace("_", " ")} - {whatsappAppointment.appointmentTime} - {whatsappAppointment.mainProblem}</p></div><Button variant="secondary">View appointment</Button></div></div>}<DoctorStatsGrid stats={stats} />{queue.length ? <DoctorQueueTable items={queue} /> : <DoctorEmptyState />}</div>;
+  return <div className="space-y-5"><PageHeader title="Good morning, Doctor" description={`${doctorName} - ${clinicName} - Active queue`} action={<Button icon={<Stethoscope className="size-4" />} loading={loading} onClick={() => void loadQueue()}>Refresh Queue</Button>} />{whatsappAppointment && <div className="rounded-2xl border border-brand-200 bg-brand-50 p-4"><p className="text-xs font-bold uppercase text-brand-700">New WhatsApp Appointment</p><div className="mt-2 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-brand-950">{whatsappAppointment.patientName}</h2><p className="text-sm text-brand-800">{whatsappAppointment.department?.replace("_", " ")} - {whatsappAppointment.appointmentTime} - {whatsappAppointment.mainProblem}</p></div><Link to={`/doctor/consultation/${whatsappAppointment.patientId}${whatsappAppointment.appointmentId ? `?appointmentId=${whatsappAppointment.appointmentId}` : ""}`}><Button variant="secondary">Open consultation</Button></Link></div></div>}<DoctorStatsGrid stats={stats} />{queue.length ? <DoctorQueueTable items={queue} /> : <DoctorEmptyState />}</div>;
 }
 
 function mapQueueItem(appointment: AppointmentRecord, patient?: PatientRecord | null, doctorName = "Doctor"): DoctorQueueItem {

@@ -1,6 +1,5 @@
 import { supabase } from "../../lib/supabaseClient";
-import type { WhatsAppConversation, WhatsAppMessage, WhatsAppTemplate } from "../../modules/whatsapp-booking/types";
-import { mockWhatsAppService } from "../mock/mockWhatsApp.service";
+import type { ClinicDepartment, WhatsAppBookingSettings, WhatsAppConversation, WhatsAppDoctor, WhatsAppMessage, WhatsAppTemplate } from "../../modules/whatsapp-booking/types";
 import type { WhatsAppConsentStatus, WhatsAppMessageInput, WhatsAppSendPlaceholderInput, WhatsAppService } from "../interfaces";
 import { logAuditEvent } from "./auditLogger";
 import { supabaseAuthService } from "./supabaseAuth.service";
@@ -14,15 +13,52 @@ function isUuid(value?: string | null) {
 }
 
 async function context(inputClinicId?: string, inputBranchId?: string | null) {
-  const fallbackClinicId = "00000000-0000-4000-8000-000000000012";
   const auth = await supabaseAuthService.getCurrentAuthContext().catch(() => null);
-  const clinicId = inputClinicId ?? auth?.clinic_id ?? fallbackClinicId;
+  const clinicId = inputClinicId ?? auth?.clinic_id ?? null;
   if (!clinicId) throw new Error("Clinic context is required for WhatsApp storage.");
   return { clinicId, branchId: inputBranchId ?? auth?.branch_id ?? null, staffId: auth?.staffProfileId ?? null };
 }
 
-function fallback<T>(operation: () => Promise<T>, backup: () => Promise<T>) {
-  return operation().catch(() => backup());
+function run<T>(operation: () => Promise<T>) {
+  return operation();
+}
+
+const knownDepartments: ClinicDepartment[] = ["dermatology", "orthopaedics", "dental", "pediatrics", "general_medicine", "physiotherapy", "hair_clinic", "other"];
+
+function normalizeDepartment(value: unknown): ClinicDepartment {
+  const key = String(value ?? "").trim().toLowerCase().replace(/\s+/g, "_");
+  return knownDepartments.includes(key as ClinicDepartment) ? (key as ClinicDepartment) : "general_medicine";
+}
+
+function departmentLabel(department: ClinicDepartment) {
+  return department.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+/**
+ * WhatsApp settings live in clinics.settings->'whatsapp'. Anything the clinic has
+ * not configured yet falls back to the clinic record or a safe "not connected" default.
+ */
+function mergeSettings(clinic: AnyRow): WhatsAppBookingSettings {
+  const stored = ((clinic.settings ?? {}).whatsapp ?? {}) as Partial<WhatsAppBookingSettings>;
+  return {
+    businessNumber: stored.businessNumber ?? clinic.whatsapp_number ?? clinic.phone ?? "",
+    displayName: stored.displayName ?? clinic.name ?? "",
+    businessProfileStatus: stored.businessProfileStatus ?? "Not submitted",
+    clinicMode: stored.clinicMode ?? (clinic.clinic_mode === "multi_speciality" ? "multi_speciality" : "single_speciality"),
+    enableBooking: stored.enableBooking ?? true,
+    allowExistingPatientLookup: stored.allowExistingPatientLookup ?? true,
+    requirePaymentBeforeConfirmation: stored.requirePaymentBeforeConfirmation ?? false,
+    autoCreateAppointment: stored.autoCreateAppointment ?? true,
+    sendReminderBeforeAppointment: stored.sendReminderBeforeAppointment ?? true,
+    reminderTiming: stored.reminderTiming ?? "24 hours before",
+    reminderTemplate: stored.reminderTemplate ?? "appointment_reminder",
+    followUpReminder: stored.followUpReminder ?? true,
+    handoffOnStaff: stored.handoffOnStaff ?? true,
+    handoffAfterFailedAttempts: stored.handoffAfterFailedAttempts ?? true,
+    receptionContactDisplay: stored.receptionContactDisplay ?? clinic.phone ?? "",
+    apiStatus: stored.apiStatus ?? "not_connected",
+    provider: stored.provider ?? "meta_cloud_api",
+  };
 }
 
 function mapMessage(row: AnyRow): WhatsAppMessage {
@@ -112,26 +148,26 @@ async function createPlaceholderMessage(input: WhatsAppSendPlaceholderInput, mes
 
 export const supabaseWhatsAppService: WhatsAppService = {
   getConversations(clinicId) {
-    return fallback(async () => {
+    return run(async () => {
       let query = db.from("whatsapp_conversations").select("*, patients(full_name), whatsapp_messages(*)").order("updated_at", { ascending: false }).order("created_at", { foreignTable: "whatsapp_messages", ascending: true });
       if (clinicId) query = query.eq("clinic_id", clinicId);
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []).map(mapConversation);
-    }, () => mockWhatsAppService.getConversations(clinicId));
+  });
   },
 
   getConversationById(id) {
-    return fallback(async () => {
+    return run(async () => {
       const { data, error } = await db.from("whatsapp_conversations").select("*, patients(full_name), whatsapp_messages(*)").eq("id", id).maybeSingle();
       if (error) throw error;
       return data ? mapConversation(data) : null;
-    }, () => mockWhatsAppService.getConversationById(id));
+  });
   },
 
   async createConversation(input) {
     const scoped = await context(input.clinicId, input.branchId);
-    return fallback(async () => {
+    return run(async () => {
       const { data, error } = await db.from("whatsapp_conversations").insert({
         clinic_id: scoped.clinicId,
         branch_id: scoped.branchId,
@@ -147,11 +183,11 @@ export const supabaseWhatsAppService: WhatsAppService = {
       }).select("*, patients(full_name), whatsapp_messages(*)").single();
       if (error) throw error;
       return mapConversation(data);
-    }, () => mockWhatsAppService.createConversation(input));
+  });
   },
 
   async updateConversation(id, input) {
-    return fallback(async () => {
+    return run(async () => {
       const { data, error } = await db.from("whatsapp_conversations").update({
         branch_id: input.branchId,
         patient_id: isUuid(input.patientId) ? input.patientId : undefined,
@@ -165,14 +201,14 @@ export const supabaseWhatsAppService: WhatsAppService = {
       }).eq("id", id).select("*, patients(full_name), whatsapp_messages(*)").single();
       if (error) throw error;
       return mapConversation(data);
-    }, () => mockWhatsAppService.updateConversation(id, input));
+  });
   },
 
   deleteConversation(id) {
-    return fallback(async () => {
+    return run(async () => {
       const { error } = await db.from("whatsapp_conversations").delete().eq("id", id);
       if (error) throw error;
-    }, () => mockWhatsAppService.deleteConversation(id));
+  });
   },
 
   transferConversationToReception(id) {
@@ -180,16 +216,16 @@ export const supabaseWhatsAppService: WhatsAppService = {
   },
 
   getMessages(conversationId) {
-    return fallback(async () => {
+    return run(async () => {
       const { data, error } = await db.from("whatsapp_messages").select("*").eq("conversation_id", conversationId).order("created_at", { ascending: true });
       if (error) throw error;
       return (data ?? []).map(mapMessage);
-    }, () => mockWhatsAppService.getMessages(conversationId));
+  });
   },
 
   async createMessage(input) {
     const scoped = await context(input.clinicId, input.branchId);
-    return fallback(async () => {
+    return run(async () => {
       const payload = messagePayload(input, scoped);
       const { data, error } = await db.from("whatsapp_messages").insert(payload).select("*").single();
       if (error) throw error;
@@ -197,11 +233,11 @@ export const supabaseWhatsAppService: WhatsAppService = {
         await db.from("whatsapp_conversations").update({ last_message: input.body, status: input.messageType === "system" ? undefined : "in_progress" }).eq("id", payload.conversation_id);
       }
       return mapMessage(data);
-    }, () => mockWhatsAppService.createMessage(input));
+  });
   },
 
   updateMessage(id, input) {
-    return fallback(async () => {
+    return run(async () => {
       const { data, error } = await db.from("whatsapp_messages").update({
         body: input.body,
         delivery_status: input.deliveryStatus,
@@ -211,29 +247,29 @@ export const supabaseWhatsAppService: WhatsAppService = {
       }).eq("id", id).select("*").single();
       if (error) throw error;
       return mapMessage(data);
-    }, () => mockWhatsAppService.updateMessage(id, input));
+  });
   },
 
   deleteMessage(id) {
-    return fallback(async () => {
+    return run(async () => {
       const { error } = await db.from("whatsapp_messages").delete().eq("id", id);
       if (error) throw error;
-    }, () => mockWhatsAppService.deleteMessage(id));
+  });
   },
 
   getTemplates(clinicId) {
-    return fallback(async () => {
+    return run(async () => {
       let query = db.from("whatsapp_templates").select("*").order("updated_at", { ascending: false });
       if (clinicId) query = query.eq("clinic_id", clinicId);
       const { data, error } = await query;
       if (error) throw error;
       return (data ?? []).map(mapTemplate);
-    }, () => mockWhatsAppService.getTemplates(clinicId));
+  });
   },
 
   async createTemplate(input) {
     const scoped = await context(input.clinicId, input.branchId);
-    return fallback(async () => {
+    return run(async () => {
       const { data, error } = await db.from("whatsapp_templates").insert({
         clinic_id: scoped.clinicId,
         branch_id: scoped.branchId,
@@ -247,11 +283,11 @@ export const supabaseWhatsAppService: WhatsAppService = {
       }).select("*").single();
       if (error) throw error;
       return mapTemplate(data);
-    }, () => mockWhatsAppService.createTemplate(input));
+  });
   },
 
   updateTemplate(id, input) {
-    return fallback(async () => {
+    return run(async () => {
       const { data, error } = await db.from("whatsapp_templates").update({
         name: input.name,
         category: input.category,
@@ -262,29 +298,29 @@ export const supabaseWhatsAppService: WhatsAppService = {
       }).eq("id", id).select("*").single();
       if (error) throw error;
       return mapTemplate(data);
-    }, () => mockWhatsAppService.updateTemplate(id, input));
+  });
   },
 
   deleteTemplate(id) {
-    return fallback(async () => {
+    return run(async () => {
       const { error } = await db.from("whatsapp_templates").delete().eq("id", id);
       if (error) throw error;
-    }, () => mockWhatsAppService.deleteTemplate(id));
+  });
   },
 
   getConsent(phone, clinicId) {
-    return fallback(async () => {
+    return run(async () => {
       let query = db.from("whatsapp_patient_consents").select("consent_status").eq("phone_number", phone);
       if (clinicId) query = query.eq("clinic_id", clinicId);
       const { data, error } = await query.maybeSingle();
       if (error) throw error;
       return (data?.consent_status ?? "unknown") as WhatsAppConsentStatus;
-    }, () => mockWhatsAppService.getConsent(phone, clinicId));
+  });
   },
 
   async upsertConsent(input) {
     const scoped = await context(input.clinicId, input.branchId);
-    return fallback(async () => {
+    return run(async () => {
       const { data, error } = await db.from("whatsapp_patient_consents").upsert({
         clinic_id: scoped.clinicId,
         branch_id: scoped.branchId,
@@ -299,12 +335,12 @@ export const supabaseWhatsAppService: WhatsAppService = {
       }, { onConflict: "clinic_id,phone_number" }).select("consent_status").single();
       if (error) throw error;
       return data.consent_status as WhatsAppConsentStatus;
-    }, () => mockWhatsAppService.upsertConsent(input));
+  });
   },
 
   async createDeliveryLog(input) {
     const scoped = await context(input.clinicId, input.branchId);
-    return fallback(async () => {
+    return run(async () => {
       const { error } = await db.from("whatsapp_delivery_logs").insert({
         clinic_id: scoped.clinicId,
         branch_id: scoped.branchId,
@@ -318,12 +354,12 @@ export const supabaseWhatsAppService: WhatsAppService = {
         created_by: scoped.staffId,
       });
       if (error) throw error;
-    }, () => mockWhatsAppService.createDeliveryLog(input));
+  });
   },
 
   async saveWebhookEventPlaceholder(input) {
     const scoped = await context(input.clinicId, input.branchId);
-    return fallback(async () => {
+    return run(async () => {
       const { error } = await db.from("whatsapp_webhook_events").insert({
         clinic_id: scoped.clinicId,
         branch_id: scoped.branchId,
@@ -335,7 +371,116 @@ export const supabaseWhatsAppService: WhatsAppService = {
         created_by: scoped.staffId,
       });
       if (error) throw error;
-    }, () => mockWhatsAppService.saveWebhookEventPlaceholder(input));
+  });
+  },
+
+  async getSettings(clinicId) {
+    const scoped = await context(clinicId);
+    const { data, error } = await supabase.from("clinics").select("*").eq("id", scoped.clinicId).single();
+    if (error) throw error;
+    return mergeSettings(data);
+  },
+
+  async updateSettings(input, clinicId) {
+    const scoped = await context(clinicId);
+    const { data: clinic, error: readError } = await supabase.from("clinics").select("settings").eq("id", scoped.clinicId).single();
+    if (readError) throw readError;
+    const current = (clinic.settings ?? {}) as Record<string, unknown>;
+    const nextWhatsApp = { ...(current.whatsapp as Record<string, unknown> | undefined), ...input };
+    const { data, error } = await supabase
+      .from("clinics")
+      .update({ settings: { ...current, whatsapp: nextWhatsApp } as never })
+      .eq("id", scoped.clinicId)
+      .select("*")
+      .single();
+    if (error) throw error;
+    logAuditEvent({ clinicId: scoped.clinicId, eventType: "whatsapp_settings_updated", entityType: "clinics", entityId: scoped.clinicId, action: "update", status: "success", severity: "info", message: "WhatsApp booking settings updated." });
+    return mergeSettings(data);
+  },
+
+  async getStats(clinicId) {
+    const scoped = await context(clinicId);
+    const [conversations, appointments, templates, reminders, messages] = await Promise.all([
+      db.from("whatsapp_conversations").select("status").eq("clinic_id", scoped.clinicId),
+      db.from("appointments").select("status,source").eq("clinic_id", scoped.clinicId).eq("source", "whatsapp"),
+      db.from("whatsapp_templates").select("status").eq("clinic_id", scoped.clinicId),
+      db.from("medicine_reminders").select("status").eq("clinic_id", scoped.clinicId).eq("status", "active"),
+      db.from("whatsapp_messages").select("delivery_status").eq("clinic_id", scoped.clinicId).eq("delivery_status", "failed"),
+    ]);
+    const conversationRows: AnyRow[] = conversations.data ?? [];
+    const appointmentRows: AnyRow[] = appointments.data ?? [];
+    return {
+      bookingRequests: conversationRows.length,
+      appointmentsConfirmed: appointmentRows.filter((row) => !["cancelled", "no_show"].includes(row.status)).length,
+      pendingConversations: conversationRows.filter((row) => ["new", "in_progress", "waiting_for_patient"].includes(row.status)).length,
+      remindersScheduled: (reminders.data ?? []).length,
+      failedMessages: (messages.data ?? []).length,
+      templatesActive: (templates.data ?? []).filter((row: AnyRow) => row.status === "active").length,
+    };
+  },
+
+  async getDepartments(clinicId) {
+    const doctors = await supabaseWhatsAppService.getClinicDoctors(clinicId);
+    const seen = new Map<ClinicDepartment, string>();
+    for (const doctor of doctors) {
+      if (!seen.has(doctor.department)) seen.set(doctor.department, departmentLabel(doctor.department));
+    }
+    return Array.from(seen.entries()).map(([id, label]) => ({ id, label }));
+  },
+
+  async getClinicDoctors(clinicId) {
+    const scoped = await context(clinicId);
+    const { data, error } = await db
+      .from("doctor_profiles")
+      .select("*, staff_profiles(full_name)")
+      .eq("clinic_id", scoped.clinicId)
+      .eq("status", "active");
+    if (error) throw error;
+    const rows: AnyRow[] = data ?? [];
+    return Promise.all(
+      rows.map(async (row): Promise<WhatsAppDoctor> => {
+        const { data: slot } = await db
+          .from("appointment_slots")
+          .select("slot_date,start_time")
+          .eq("doctor_id", row.id)
+          .eq("status", "available")
+          .gte("slot_date", new Date().toISOString().slice(0, 10))
+          .order("slot_date", { ascending: true })
+          .order("start_time", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        return {
+          id: row.id,
+          name: row.staff_profiles?.full_name ?? "Doctor",
+          qualification: row.qualification ?? "",
+          department: normalizeDepartment(row.department),
+          specialisation: row.specialization ?? row.department ?? "General",
+          consultationFee: Number(row.consultation_fee ?? 0),
+          nextAvailableSlot: slot ? `${slot.slot_date} ${String(slot.start_time).slice(0, 5)}` : "No open slot",
+        };
+      }),
+    );
+  },
+
+  async getDoctorAvailability(doctorId, days = 7) {
+    const { data, error } = await supabase.rpc("public_doctor_available_dates", { p_doctor_id: doctorId, p_days: days });
+    if (error) throw error;
+    const dates = Array.isArray(data) ? (data as AnyRow[]) : [];
+    const withSlots = await Promise.all(
+      dates
+        .filter((date) => date.available)
+        .map(async (date) => {
+          const { data: slots, error: slotError } = await supabase.rpc("public_doctor_available_slots", { p_doctor_id: doctorId, p_date: String(date.date) });
+          if (slotError) throw slotError;
+          const rows = Array.isArray(slots) ? (slots as AnyRow[]) : [];
+          return {
+            date: String(date.date),
+            label: String(date.label),
+            slots: rows.filter((slot) => slot.status !== "booked").map((slot) => String(slot.label)),
+          };
+        }),
+    );
+    return { doctorId, dates: withSlots };
   },
 
   sendAppointmentPlaceholder: (input) => createPlaceholderMessage(input, "appointment"),

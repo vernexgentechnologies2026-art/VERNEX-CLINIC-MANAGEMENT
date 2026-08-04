@@ -26,7 +26,9 @@ export default function Appointments() {
   const [source, setSource] = useState<AppointmentSource | "all">("all");
   const [doctorId, setDoctorId] = useState("all");
   const [date, setDate] = useState("");
-  const [modal, setModal] = useState<"add" | "reschedule" | "cancel" | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -84,12 +86,12 @@ export default function Appointments() {
     }
   };
 
-  return <div className="space-y-5"><PageHeader title="Appointments" description="Search, filter, book slots, and push patients into queue." action={<Button icon={<CalendarPlus className="size-4" />} onClick={() => setModal("add")}>Add Appointment</Button>} />
-    <Card className="p-4"><div className="grid gap-3 lg:grid-cols-6"><Input className="lg:col-span-2" placeholder="Search appointment" value={query} onChange={(event) => setQuery(event.target.value)} /><Select value={doctorId} onChange={(event) => setDoctorId(event.target.value)}><option value="all">All doctors</option>{doctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.label}</option>)}</Select><Select value={status} onChange={(event) => setStatus(event.target.value as AppointmentStatus | "all")}><option value="all">All status</option><option value="booked">Booked</option><option value="arrived">Arrived</option><option value="waiting">Waiting</option><option value="in_consultation">In consultation</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="no_show">No-show</option></Select><Select value={source} onChange={(event) => setSource(event.target.value as AppointmentSource | "all")}><option value="all">All sources</option><option value="walk_in">Walk-in</option><option value="phone_call">Phone call</option><option value="qr_booking">QR booking</option><option value="whatsapp">WhatsApp</option><option value="website">Website</option></Select><Input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></div><div className="mt-3 flex flex-wrap gap-2"><Button variant="secondary" className="min-h-8 px-3 py-1" loading={loading} onClick={() => void loadAppointments()}>Refresh</Button><Button variant="ghost" className="min-h-8 px-3 py-1" onClick={() => setModal("reschedule")}>Reschedule</Button><Button variant="ghost" className="min-h-8 px-3 py-1" onClick={() => setModal("cancel")}>Cancel</Button></div></Card>
-    <Card className="p-5"><AppointmentTable appointments={rows} onStatusChange={updateStatus} /></Card>
-    <AppointmentFormModal open={modal === "add"} onClose={() => setModal(null)} onCreated={loadAppointments} />
-    <RescheduleAppointmentModal open={modal === "reschedule"} onClose={() => setModal(null)} />
-    <CancelAppointmentModal open={modal === "cancel"} onClose={() => setModal(null)} />
+  return <div className="space-y-5"><PageHeader title="Appointments" description="Search, filter, book slots, and push patients into queue." action={<Button icon={<CalendarPlus className="size-4" />} onClick={() => setAddOpen(true)}>Add Appointment</Button>} />
+    <Card className="p-4"><div className="grid gap-3 lg:grid-cols-6"><Input className="lg:col-span-2" placeholder="Search appointment" value={query} onChange={(event) => setQuery(event.target.value)} /><Select value={doctorId} onChange={(event) => setDoctorId(event.target.value)}><option value="all">All doctors</option>{doctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.label}</option>)}</Select><Select value={status} onChange={(event) => setStatus(event.target.value as AppointmentStatus | "all")}><option value="all">All status</option><option value="booked">Booked</option><option value="arrived">Arrived</option><option value="waiting">Waiting</option><option value="in_consultation">In consultation</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="no_show">No-show</option></Select><Select value={source} onChange={(event) => setSource(event.target.value as AppointmentSource | "all")}><option value="all">All sources</option><option value="walk_in">Walk-in</option><option value="phone_call">Phone call</option><option value="qr_booking">QR booking</option><option value="whatsapp">WhatsApp</option><option value="website">Website</option></Select><Input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></div><div className="mt-3 flex flex-wrap gap-2"><Button variant="secondary" className="min-h-8 px-3 py-1" loading={loading} onClick={() => void loadAppointments()}>Refresh</Button></div></Card>
+    <Card className="p-5"><AppointmentTable appointments={rows} onStatusChange={updateStatus} onReschedule={setRescheduleTarget} onCancel={setCancelTarget} /></Card>
+    <AppointmentFormModal open={addOpen} onClose={() => setAddOpen(false)} onCreated={loadAppointments} />
+    <RescheduleAppointmentModal appointment={rescheduleTarget} onClose={() => setRescheduleTarget(null)} onDone={loadAppointments} />
+    <CancelAppointmentModal appointment={cancelTarget} onClose={() => setCancelTarget(null)} onDone={loadAppointments} />
   </div>;
 }
 

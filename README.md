@@ -1,91 +1,193 @@
 # Vernex Clinic OS
 
-Frontend foundation for a role-based clinic operating system. All data and authentication are mocked and isolated for straightforward backend integration later.
+A role-based clinic management system for Indian clinics: appointments, consultations,
+prescriptions, pharmacy, billing, reports and WhatsApp-first patient booking.
 
-## Current Model
+Every screen reads and writes **live Supabase data**. There is no mock layer — the
+service registry in `frontend/src/services/serviceProvider.ts` points at Supabase
+implementations only, and row-level security scopes every query to the signed-in
+staff member's clinic.
 
-- Internal roles: Owner, Receptionist, Doctor, Pharmacist, Super Admin.
-- The patient login role and patient portal module have been removed.
-- Patients interact through WhatsApp and the optional public booking/QR flow only.
-- Patient records remain clinical data used by reception, doctors, billing, pharmacy, appointments, prescriptions, reminders, and WhatsApp conversations.
-- Route-level lazy loading and Suspense skeletons keep the initial shell fast and readable.
-- Typed mock data, service interfaces, mock implementations, hooks, and access-control helpers now provide the backend replacement boundary.
+---
+
+## Stack
+
+| Layer | Choice |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 3 |
+| Routing | React Router 7 with lazy routes and module guards |
+| Charts | Recharts |
+| Forms | React Hook Form + Zod |
+| Backend | Supabase (PostgreSQL, Auth, RLS, RPC) |
+
+---
 
 ## Architecture
 
-- Shared domain contracts: `src/shared/types/domain.ts`.
-- Central typed mocks: `src/mocks/`.
-- Service interfaces: `src/services/interfaces/`.
-- Mock implementations: `src/services/mock/`.
-- Active service registry: `src/services/serviceProvider.ts`.
-- Role/module/permission controls: `src/access-control/`.
-- Backend handoff docs: `docs/MOCK_DATA_GUIDE.md`, `docs/FRONTEND_BACKEND_CONTRACT.md`, `docs/SUPABASE_REPLACEMENT_GUIDE.md`.
+```
+frontend/src/
+  services/
+    interfaces/        typed service contracts (the backend boundary)
+    supabase/          the only implementations — one per domain
+    serviceProvider.ts single registry every screen imports
+  modules/             feature modules: reception, doctor, pharmacy,
+                       billing, whatsapp-booking, patient-booking
+  access-control/      role, module and permission guards
+  shared/types/        domain types + generated database.types.ts
+supabase/
+  migrations/          schema, RLS policies and RPCs (phases 1-15)
+  seed/demo_seed.sql   demo data, safe to re-run
+```
 
-## Reception
+**Access control is enforced twice.** The UI hides what a role cannot use
+(`ModuleGuard`, `PermissionGuard`), and PostgreSQL RLS independently rejects
+anything the UI might have let through. The database is the authority.
 
-- Reception dashboard with patient search, stats, quick actions, queue preview, upcoming appointments, pending billing, and WhatsApp booking awareness.
-- Appointment management with search, doctor/status/source/date filters, add/reschedule/cancel placeholders, and payment/status badges.
-- Live queue board, new patient registration, and billing shortcut workflows.
+**Patients never log in.** They reach the clinic through WhatsApp or the public
+booking link. Patient records are clinical data owned by staff.
 
-## Doctor
+---
 
-- Doctor queue with WhatsApp appointment badge, department, appointment time, main problem, new/existing patient state, WhatsApp details action, and start consultation action.
-- Doctor availability management at `/doctor/availability` for working days, slot duration, breaks, blocked dates, emergency leave, and max appointment limits.
-- Patient profile, consultation, prescription, follow-up, and patient reminder workflows.
-- Prescription builder includes Save Prescription, Send Prescription to WhatsApp modal, Send to Pharmacy, Print, Enable Medicine Reminders, and Complete Consultation.
-- Patient Reminders at `/doctor/patient-reminders` are doctor-controlled WhatsApp reminder placeholders. Patients do not manage reminders in a portal.
-- Follow-ups show WhatsApp reminder delivery status, sent date, patient response status, and booking action placeholders.
+## Setup
 
-## WhatsApp Booking
-
-- WhatsApp booking module lives under `src/modules/whatsapp-booking`.
-- Simulator supports multi-speciality and single-speciality clinic modes.
-- Multi-speciality flow: Hi, department, doctor, date, slot, patient details, problem, summary, confirmation.
-- Single-speciality flow: Hi, Book Appointment/View Appointment/Talk to Reception, doctor/date/slot, details, confirmation.
-- Confirmed WhatsApp appointment mock data appears in the doctor queue.
-- Service placeholders in `src/services/whatsappBooking.service.ts` are typed for later Supabase and official WhatsApp API integration.
-
-## Public Booking
-
-- Public booking remains under `src/modules/patient-booking`.
-- `/book/:clinicSlug`, booking flow, success page, and booking status lookup remain available as optional QR/public-link alternatives.
-- Doctor, service, and slot selectors use larger mobile-friendly tap targets and clearer selected states.
-
-## Pharmacy And Billing
-
-- Pharmacy dashboard, prescription queue, stock, billing, purchase entry, low-stock, and expiry workflows remain unchanged.
-- Billing dashboard, bill creation, invoices, receipts, pending payments, refunds, and reports remain available.
-
-## Phase 9 UI/UX Polish
-
-- Design tokens were standardized for brand, surface, border, muted text, success, warning, danger, and info states.
-- Shared UI primitives were polished: Button, Input, Select, Textarea, Modal, Badge, StatusPill, PageHeader, StatsCard, EmptyState.
-- New shared helpers were added for LoadingSkeleton, ErrorState, ConfirmationDialog, Tabs, Pagination, FilterBar, and DateRangePicker.
-- App shell now supports a collapsible desktop sidebar, mobile drawer, cleaner topbar search, clearer active nav, and accessible tap targets.
-- Status colors were expanded across appointments, payments, prescription delivery, medicine reminders, and stock states.
-- Reception queue no-show uses a confirmation dialog.
-- WhatsApp simulator uses a Vernex-branded chat surface with safer mobile bubble widths and a sticky action area.
-- Public booking cards and slot buttons were tightened for mobile/tablet/desktop consistency.
-- Modals now support Escape-to-close, descriptions, scrollable content, sticky footers, and near-full-width mobile layout.
-
-## Validation
-
-- `npm run build` passes.
-- Strict scans found no patient portal routes or patient portal service imports.
-- The broad word "patient" remains in clinical records, patient booking, doctor workflows, billing, pharmacy, and WhatsApp contexts by design.
-
-## Run Locally
+### 1. Environment
 
 ```bash
+cd frontend
+cp .env.example .env
+```
+
+Fill in from your Supabase project (Settings → API):
+
+```
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon key>
+```
+
+`frontend/.env` is git-ignored. Never commit it. The anon key is safe in the
+browser precisely because RLS is enforced — do not put the service role key here.
+
+### 2. Database
+
+Apply every migration in `supabase/migrations/` in filename order, either with
+the Supabase CLI:
+
+```bash
+supabase db push
+```
+
+or by pasting each file into the SQL editor. All migrations are idempotent and
+safe to re-run.
+
+### 3. Demo data (optional)
+
+Create these users under **Authentication → Users** with *Auto Confirm User*
+ticked, all sharing one password:
+
+```
+owner@vernex.test        reception@vernex.test    pharmacist@vernex.test
+doctor@vernex.test       doctor2@vernex.test      doctor3@vernex.test
+super_admin@vernex.test
+```
+
+Then run `supabase/seed/demo_seed.sql`. It identifies the demo clinic by its
+slug (`vernex-demo-clinic`), adopts an existing one if present, re-dates itself
+around today and skips any user you chose not to create. Re-running refreshes
+the data rather than duplicating it.
+
+### 4. Run
+
+```bash
+cd frontend
 npm install
-npm run dev
+npm run dev     # http://localhost:5173
+npm run build   # production build
 ```
 
-Use any email/password and select Owner, Receptionist, Doctor, Pharmacist, or Super Admin on the demo login page.
+---
 
-## Production Check
+## Demo accounts
 
-```bash
-npm run build
-npm run preview
-```
+Sign in with **either the email or the staff ID** — the login screen resolves a
+staff ID to its email through the `resolve_staff_login_email` RPC.
+
+| Login | Staff ID | Role | Lands on |
+| --- | --- | --- | --- |
+| `owner@vernex.test` | `VNX-OWNER-001` | Owner | `/owner/dashboard` |
+| `reception@vernex.test` | `VNX-REC-001` | Receptionist | `/reception/dashboard` |
+| `doctor@vernex.test` | `VNX-DOC-001` | Doctor · General Medicine | `/doctor/queue` |
+| `doctor2@vernex.test` | `VNX-DOC-002` | Doctor · Dental | `/doctor/queue` |
+| `doctor3@vernex.test` | `VNX-DOC-003` | Doctor · Dermatology | `/doctor/queue` |
+| `pharmacist@vernex.test` | `VNX-PHAR-001` | Pharmacist | `/pharmacy/dashboard` |
+| `super_admin@vernex.test` | `VNX-SUPER-002` | Super Admin | `/super-admin/dashboard` |
+
+> Passwords are **not** stored in this repository. You choose them when you
+> create the users. These are disposable test accounts — never reuse them, or
+> the `@vernex.test` addresses, for anything real.
+
+The public patient page needs no login: `/book/vernex-demo-clinic`.
+
+---
+
+## Modules
+
+**Reception** — dashboard with live queue and today's appointments; appointment
+search and filters; booking, rescheduling and cancellation with WhatsApp notice;
+walk-in registration; a billing shortcut that records real payments against open
+invoices.
+
+**Doctor** — queue with WhatsApp-booking context; consultation capture (symptoms,
+vitals, diagnosis, advice, follow-up); prescription builder with clinic medicine
+autocomplete, saved templates, learned favourites and lab tests; WhatsApp
+delivery and pharmacy routing; follow-up tracking; medicine reminder schedules;
+weekly availability and blocked dates.
+
+**Pharmacy** — prescription queue with dispensing; medicine stock with batch,
+expiry and low-stock tracking; multi-row purchase entry that creates or tops up
+batches and records stock movements; counter billing.
+
+**Billing** — invoice builder driven by the clinic service catalogue; invoices,
+receipts, pending payments with reminders; refunds with a request → approve →
+process workflow; seven reports with date/doctor/branch filters and CSV export.
+
+**WhatsApp booking** — booking console that walks a patient through department →
+doctor → date → slot → details and creates a real appointment with source
+`whatsapp`, persisting the conversation; message templates; conversation
+tracking; clinic-level settings stored on the clinic record.
+
+**Public booking** — `/book/:clinicSlug` runs unauthenticated through
+security-definer RPCs (`public_clinic_doctors`, `public_doctor_available_slots`,
+`public_create_booking`, …). Anonymous visitors can browse doctors, services and
+open slots and book an appointment, but **cannot read patient, appointment or
+billing tables directly** — RLS returns nothing. Booking status lookup requires
+both the phone number and the token.
+
+**Owner / Super Admin** — clinic overview with revenue trend, appointment mix,
+doctor-wise revenue and low-stock alerts; monitoring (audit, errors, security,
+health); clinic, branch, staff and module administration.
+
+---
+
+## Security notes
+
+- RLS is enabled on all tables; policies scope reads and writes to
+  `current_clinic_id()` and check per-module permissions.
+- The anonymous booking path never touches a table directly — only
+  `security definer` RPCs that return a curated payload.
+- Slot booking takes a row lock and rejects double-booking.
+- Booking status requires phone **and** reference; a matching token alone
+  returns nothing.
+- WhatsApp sends are recorded in `whatsapp_messages` and
+  `whatsapp_delivery_logs` but **no message leaves the system** until an official
+  WhatsApp Business API provider is connected. Do not use unofficial WhatsApp
+  automation for patient health data.
+- Never commit `frontend/.env`, a service role key, or the Supabase CLI
+  `.temp/` link state.
+
+---
+
+## Documentation
+
+Phase-by-phase build notes live in [docs/](docs/), including the
+[frontend/backend contract](docs/FRONTEND_BACKEND_CONTRACT.md) and the
+[Supabase integration guide](docs/SUPABASE_REPLACEMENT_GUIDE.md).

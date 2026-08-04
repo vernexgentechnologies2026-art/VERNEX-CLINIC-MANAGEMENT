@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button, Card, Input, PageHeader, Select, Textarea } from "../../../components/ui";
-import { getPastPrescriptions } from "../../../services/doctor.service";
 import { services } from "../../../services/serviceProvider";
-import type { AppointmentRecord, PatientRecord } from "../../../shared/types/domain";
+import type { AppointmentRecord } from "../../../shared/types/domain";
 import type { Tables, TablesInsert } from "../../../shared/types/database.types";
 import { PatientHistoryPanel } from "../components/PatientHistoryPanel";
 import { PatientSummaryCard } from "../components/PatientSummaryCard";
-import type { PatientProfile, PatientTimelineItem } from "../types";
+import type { PatientProfile, PatientTimelineItem, Prescription } from "../types";
 
 type ConsultationRow = Tables<"consultations">;
 type VitalsRow = Tables<"consultation_vitals">;
@@ -29,10 +28,11 @@ export default function Consultation() {
   const { patientId = "" } = useParams();
   const [searchParams] = useSearchParams();
   const appointmentId = searchParams.get("appointmentId") ?? "";
-  const [patient, setPatient] = useState<PatientRecord | null>(null);
+  const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
   const [appointment, setAppointment] = useState<AppointmentRecord | null>(null);
   const [consultation, setConsultation] = useState<ConsultationRow | null>(null);
-  const [history, setHistory] = useState<ConsultationRow[]>([]);
+  const [timeline, setTimeline] = useState<PatientTimelineItem[]>([]);
+  const [pastPrescriptions, setPastPrescriptions] = useState<Prescription[]>([]);
   const [doctorId, setDoctorId] = useState("");
   const [loading, setLoading] = useState(false);
   const [symptoms, setSymptoms] = useState("");
@@ -50,20 +50,23 @@ export default function Consultation() {
       const context = await services.auth.getCurrentAuthContext();
       const profile = await services.doctor.getDoctorProfileByStaffId(context.staffProfileId);
       if (!profile) throw new Error("No doctor profile is linked to this staff user.");
-      const [nextPatient, doctorAppointments, priorConsultations] = await Promise.all([
-        services.patients.getPatientById(patientId),
+      const [nextProfile, doctorAppointments, priorConsultations, nextTimeline, nextPrescriptions] = await Promise.all([
+        services.doctor.getPatientProfile(patientId),
         services.appointments.getDoctorAppointments(profile.id),
         services.doctor.getConsultationsByPatient(patientId),
+        services.doctor.getPatientTimeline(patientId),
+        services.doctor.getPatientPrescriptionHistory(patientId),
       ]);
       const nextAppointment = appointmentId
         ? await services.appointments.getAppointmentById(appointmentId)
         : doctorAppointments.find((item) => item.patientId === patientId && !["completed", "cancelled", "no_show"].includes(item.status)) ?? null;
       const existing = nextAppointment ? await services.doctor.getConsultationByAppointment(nextAppointment.id) : priorConsultations[0] ?? null;
       const nextVitals = existing ? await services.doctor.getVitals(existing.id) : [];
-      setPatient(nextPatient);
+      setPatientProfile(nextProfile);
       setAppointment(nextAppointment);
       setConsultation(existing);
-      setHistory(priorConsultations);
+      setTimeline(nextTimeline);
+      setPastPrescriptions(nextPrescriptions);
       setDoctorId(profile.id);
       setSymptoms(existing?.symptoms?.replace(/\nSeverity:.*/, "") ?? nextAppointment?.reason ?? "");
       setDiagnosis(existing?.diagnosis ?? "");
@@ -91,11 +94,8 @@ export default function Consultation() {
 
   useEffect(() => { if (patientId) void loadConsultation(); }, [patientId, appointmentId]);
 
-  const patientProfile = useMemo(() => patient ? toPatientProfile(patient) : null, [patient]);
-  const timeline = useMemo(() => history.map(toTimelineItem), [history]);
-
   const saveDraft = async () => {
-    if (!patient || !appointment || !doctorId) {
+    if (!patientProfile || !appointment || !doctorId) {
       toast.error("An assigned appointment is required to save a consultation.");
       return null;
     }
@@ -105,7 +105,7 @@ export default function Consultation() {
         clinic_id: appointment.clinicId,
         branch_id: appointment.branchId || null,
         appointment_id: appointment.id,
-        patient_id: patient.id,
+        patient_id: patientProfile.id,
         doctor_id: doctorId,
         symptoms: `${symptoms}${severity ? `\nSeverity: ${severity}` : ""}`.trim(),
         diagnosis,
@@ -171,19 +171,11 @@ export default function Consultation() {
         <section className="card p-5"><h2 className="font-bold">Vitals</h2><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Input placeholder="Temperature" value={vitals.temperature} onChange={(event) => setVitals({ ...vitals, temperature: event.target.value })} /><Input placeholder="BP" value={vitals.bloodPressure} onChange={(event) => setVitals({ ...vitals, bloodPressure: event.target.value })} /><Input placeholder="Pulse" value={vitals.pulse} onChange={(event) => setVitals({ ...vitals, pulse: event.target.value })} /><Input placeholder="Respiratory rate" value={vitals.respiratoryRate} onChange={(event) => setVitals({ ...vitals, respiratoryRate: event.target.value })} /><Input placeholder="Weight" value={vitals.weight} onChange={(event) => setVitals({ ...vitals, weight: event.target.value })} /><Input placeholder="Height" value={vitals.height} onChange={(event) => setVitals({ ...vitals, height: event.target.value })} /><Input placeholder="SpO2" value={vitals.oxygen} onChange={(event) => setVitals({ ...vitals, oxygen: event.target.value })} /><Input placeholder="Sugar level" value={vitals.sugar} onChange={(event) => setVitals({ ...vitals, sugar: event.target.value })} /></div><Textarea className="mt-3" placeholder="Vitals notes" value={vitals.vitalsNotes} onChange={(event) => setVitals({ ...vitals, vitalsNotes: event.target.value })} /></section>
         <section className="card p-5"><h2 className="font-bold">Diagnosis</h2><div className="mt-4 grid gap-3 md:grid-cols-[1fr_.45fr]"><Input placeholder="Search/select diagnosis" value={diagnosis} onChange={(event) => setDiagnosis(event.target.value)} /><Select defaultValue="provisional"><option>provisional</option><option>final</option></Select><Textarea className="md:col-span-2" placeholder="Advice" value={advice} onChange={(event) => setAdvice(event.target.value)} /></div></section>
         <section className="card p-5"><h2 className="font-bold">Follow-up</h2><div className="mt-3 grid gap-3 md:grid-cols-2"><Input type="date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} /><Textarea className="md:col-span-2" placeholder="Follow-up reason" value={followUpReason} onChange={(event) => setFollowUpReason(event.target.value)} /></div></section>
-        <div className="flex flex-wrap gap-2 rounded-2xl border bg-white p-3"><Button loading={loading} onClick={() => void saveDraft()}>Save Draft</Button><Link to={`/doctor/prescription/${patientProfile.id}`}><Button variant="secondary">Continue to Prescription</Button></Link><Button loading={loading} variant="secondary" onClick={() => void complete()}>Complete Without Prescription</Button><Button variant="ghost">Cancel</Button></div>
+        <div className="flex flex-wrap gap-2 rounded-2xl border bg-white p-3"><Button loading={loading} onClick={() => void saveDraft()}>Save Draft</Button><Link to={`/doctor/prescription/${patientProfile.id}`}><Button variant="secondary">Continue to Prescription</Button></Link><Button loading={loading} variant="secondary" onClick={() => void complete()}>Complete Without Prescription</Button><Link to="/doctor/queue"><Button variant="ghost">Back to queue</Button></Link></div>
       </main>
-      <aside className="xl:sticky xl:top-24 xl:self-start"><PatientHistoryPanel timeline={timeline} prescriptions={getPastPrescriptions()} /></aside>
+      <aside className="xl:sticky xl:top-24 xl:self-start"><PatientHistoryPanel timeline={timeline} prescriptions={pastPrescriptions} /></aside>
     </div>
   </div>;
-}
-
-function toPatientProfile(patient: PatientRecord): PatientProfile {
-  return { id: patient.id, name: patient.fullName, phone: patient.phone, age: patient.age, gender: patient.gender, bloodGroup: "", tags: ["Regular"], lastVisit: "", allergies: patient.allergies, conditions: patient.medicalHistory, medications: patient.currentMedications, emergencyContact: "", totalVisits: 0, pendingPayment: false, internalNotes: "" };
-}
-
-function toTimelineItem(row: ConsultationRow): PatientTimelineItem {
-  return { id: row.id, date: row.created_at?.slice(0, 10) ?? "", doctor: "Doctor", diagnosis: row.diagnosis ?? "Draft consultation", prescriptionSummary: "Prescription pending", followUpStatus: row.follow_up_date ? `Follow-up ${row.follow_up_date}` : "No follow-up", paymentStatus: row.status ?? "draft" };
 }
 
 function numberOrNull(value: string) {

@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Textarea } from "../../../components/ui";
-import { getFavoriteMedicines, getLabTests, getPrescriptionTemplates } from "../../../services/doctor.service";
 import { services } from "../../../services/serviceProvider";
-import type { PatientProfile, PrescriptionItem, WhatsAppDeliveryStatus } from "../types";
+import type { LabTest, Medicine, PatientProfile, PrescriptionItem, PrescriptionTemplate, WhatsAppDeliveryStatus } from "../types";
 import { LabTestSuggestionPanel } from "./LabTestSuggestionPanel";
 import { MedicineReminderSetup } from "./MedicineReminderSetup";
 import { MedicineRow } from "./MedicineRow";
@@ -16,7 +15,13 @@ import { ReminderSchedulePreview } from "./ReminderSchedulePreview";
 
 const blank = (): PrescriptionItem => ({ id: crypto.randomUUID(), medicineName: "", dosage: "1 tablet", frequency: "1-0-1", timing: "After food", duration: "3 days", instructions: "", quantity: "" });
 export function PrescriptionBuilder({ patient }: { patient: PatientProfile }) {
-  const [items, setItems] = useState<PrescriptionItem[]>([{ ...blank(), medicineName: "Paracetamol 500mg" }]);
+  const [items, setItems] = useState<PrescriptionItem[]>([blank()]);
+  const [favorites, setFavorites] = useState<Medicine[]>([]);
+  const [templates, setTemplates] = useState<PrescriptionTemplate[]>([]);
+  const [labTests, setLabTests] = useState<LabTest[]>([]);
+  const [selectedLabTests, setSelectedLabTests] = useState<string[]>([]);
+  const [doctorName, setDoctorName] = useState("");
+  const [diagnosis, setDiagnosis] = useState("");
   const [sendOpen, setSendOpen] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
@@ -28,7 +33,36 @@ export function PrescriptionBuilder({ patient }: { patient: PatientProfile }) {
   const [avoidItems, setAvoidItems] = useState("");
   const [restNote, setRestNote] = useState("");
   const update = (next: PrescriptionItem) => setItems((rows) => rows.map((row) => row.id === next.id ? next : row));
-  const addItems = (newItems: PrescriptionItem[]) => setItems((rows) => [...rows, ...newItems.map((i) => ({ ...i, id: crypto.randomUUID() }))]);
+  const addItems = (newItems: PrescriptionItem[]) => setItems((rows) => [...rows.filter((row) => row.medicineName.trim()), ...newItems.map((i) => ({ ...i, id: crypto.randomUUID() }))]);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const context = await services.auth.getCurrentAuthContext();
+        const profile = await services.doctor.getDoctorProfileByStaffId(context.staffProfileId);
+        const [nextFavorites, nextTemplates, nextLabTests] = await Promise.all([
+          services.catalog.getFavoriteMedicines(profile?.id),
+          services.catalog.getPrescriptionTemplates(profile?.id),
+          services.catalog.getLabTests(),
+        ]);
+        // The prescription letterhead shows the signing doctor and the diagnosis
+        // recorded during the consultation this prescription belongs to.
+        const [latestConsultation] = await services.doctor.getConsultationsByPatient(patient.id).catch(() => []);
+        if (!mounted) return;
+        setDoctorName(context.fullName);
+        setDiagnosis(latestConsultation?.diagnosis ?? "");
+        setFavorites(nextFavorites);
+        setTemplates(nextTemplates);
+        setLabTests(nextLabTests);
+      } catch (error) {
+        if (mounted) toast.error(error instanceof Error ? error.message : "Unable to load prescription templates and favourites.");
+      }
+    };
+    void load();
+    return () => { mounted = false; };
+  }, [patient.id]);
+
   const savePrescription = async () => {
     if (!isUuid(patient.id)) {
       toast.error("Load a real patient record before saving a Supabase prescription.");
@@ -54,7 +88,7 @@ export function PrescriptionBuilder({ patient }: { patient: PatientProfile }) {
           patient_id: patient.id,
           doctor_id: doctorProfile.id,
           diagnosis_summary: latestConsultation?.diagnosis || null,
-          advice: formatAdvice(advice, dietAdvice, avoidItems, restNote),
+          advice: formatAdvice(advice, dietAdvice, avoidItems, restNote, selectedLabTests),
           status: "draft",
           delivery_status: "queued",
           delivery_channel: "none",
@@ -79,6 +113,11 @@ export function PrescriptionBuilder({ patient }: { patient: PatientProfile }) {
         reminderConsentConfirmed: showReminders,
       });
       setSavedPrescriptionId(saved.prescription.id);
+      // Feed the doctor's favourites list so the next prescription surfaces what they actually prescribe.
+      if (doctorProfile.id) {
+        await services.catalog.recordMedicineUsage(doctorProfile.id, medicineRows.map((item) => item.medicineName)).catch(() => undefined);
+        services.catalog.getFavoriteMedicines(doctorProfile.id).then(setFavorites).catch(() => undefined);
+      }
       toast.success("Prescription saved.");
       return saved.prescription.id;
     } catch (error) {
@@ -130,15 +169,16 @@ export function PrescriptionBuilder({ patient }: { patient: PatientProfile }) {
       setLoading(false);
     }
   };
-  return <div className="space-y-5"><div className="card p-5"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold">Medicine Builder</h2><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" icon={<Plus className="size-4" />} onClick={() => setItems([...items, blank()])}>Add Medicine</Button><Button type="button" variant="ghost" onClick={() => setItems([])}>Clear Prescription</Button></div></div><div className="mt-4 space-y-3">{items.map((item) => <MedicineRow key={item.id} item={item} onChange={update} onRemove={() => setItems(items.filter((row) => row.id !== item.id))} />)}</div></div><div className="grid gap-5 xl:grid-cols-[.7fr_1.3fr]"><div className="space-y-5"><div className="card p-5"><h2 className="font-bold">Favorite Medicines</h2><div className="mt-3 flex flex-wrap gap-2">{getFavoriteMedicines().map((m) => <Button key={m.id} variant="secondary" className="min-h-8 px-3 py-1" onClick={() => addItems([{ ...blank(), medicineName: m.name }])}>{m.name}</Button>)}</div></div><PrescriptionTemplatePanel templates={getPrescriptionTemplates()} onUse={addItems} /><LabTestSuggestionPanel tests={getLabTests()} />{showReminders && <ReminderSchedulePreview items={items} />}</div><div className="space-y-5"><div className="card p-5"><h2 className="font-bold">Advice</h2><div className="mt-3 grid gap-3 md:grid-cols-2"><Textarea placeholder="General advice" value={advice} onChange={(event) => setAdvice(event.target.value)} /><Textarea placeholder="Diet advice" value={dietAdvice} onChange={(event) => setDietAdvice(event.target.value)} /><Textarea placeholder="Avoid items" value={avoidItems} onChange={(event) => setAvoidItems(event.target.value)} /><Textarea placeholder="Rest/work note" value={restNote} onChange={(event) => setRestNote(event.target.value)} /></div></div>{showReminders && <div className="card p-5"><h2 className="font-bold">WhatsApp Medicine Reminders</h2><p className="mt-1 text-sm text-slate-500">Optional. Do not enable without consent.</p><div className="mt-4"><MedicineReminderSetup items={items} /></div></div>}<PrescriptionPreview patient={patient} items={items} /></div></div><div className="sticky bottom-3 z-10 flex flex-wrap gap-2 rounded-2xl border bg-white/95 p-3 shadow-card backdrop-blur"><Button loading={loading} onClick={() => void savePrescription()}>Save Prescription</Button><Button loading={loading} icon={<Send className="size-4" />} onClick={() => setSendOpen(true)}>Send Prescription to WhatsApp</Button><Button loading={loading} variant="secondary" onClick={() => void routeToPharmacy()}>Send to Pharmacy</Button><Button variant="secondary" onClick={() => { window.print(); toast.info("Print placeholder opened."); }}>Print</Button><Button variant="secondary" onClick={() => setConsentOpen(true)}>Enable Medicine Reminders</Button><Button loading={loading} onClick={() => void finalizePrescription()}>Complete Consultation</Button>{deliveryStatus !== "queued" && <span className="rounded-full bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">WhatsApp status: {deliveryStatus}</span>}{savedPrescriptionId && <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Saved</span>}</div><PrescriptionWhatsAppModal open={sendOpen} patient={patient} items={items} status={deliveryStatus} onClose={() => setSendOpen(false)} onSend={() => void sendPrescription()} /><ReminderConsentModal open={consentOpen} onClose={() => setConsentOpen(false)} onEnable={() => { setShowReminders(true); setConsentOpen(false); }} /></div>;
+  return <div className="space-y-5"><div className="card p-5"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold">Medicine Builder</h2><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" icon={<Plus className="size-4" />} onClick={() => setItems([...items, blank()])}>Add Medicine</Button><Button type="button" variant="ghost" onClick={() => setItems([])}>Clear Prescription</Button></div></div><div className="mt-4 space-y-3">{items.map((item) => <MedicineRow key={item.id} item={item} onChange={update} onRemove={() => setItems(items.filter((row) => row.id !== item.id))} />)}</div></div><div className="grid gap-5 xl:grid-cols-[.7fr_1.3fr]"><div className="space-y-5"><div className="card p-5"><h2 className="font-bold">Favorite Medicines</h2><div className="mt-3 flex flex-wrap gap-2">{favorites.length > 0 ? favorites.map((m) => <Button key={m.id} variant="secondary" className="min-h-8 px-3 py-1" onClick={() => addItems([{ ...blank(), medicineName: m.name, dosage: m.form || "1 tablet" }])}>{m.name}</Button>) : <p className="text-sm text-slate-500">Medicines you prescribe often will appear here.</p>}</div></div><PrescriptionTemplatePanel templates={templates} onUse={addItems} /><LabTestSuggestionPanel tests={labTests} selected={selectedLabTests} onToggle={(name) => setSelectedLabTests((current) => current.includes(name) ? current.filter((item) => item !== name) : [...current, name])} />{showReminders && <ReminderSchedulePreview items={items} />}</div><div className="space-y-5"><div className="card p-5"><h2 className="font-bold">Advice</h2><div className="mt-3 grid gap-3 md:grid-cols-2"><Textarea placeholder="General advice" value={advice} onChange={(event) => setAdvice(event.target.value)} /><Textarea placeholder="Diet advice" value={dietAdvice} onChange={(event) => setDietAdvice(event.target.value)} /><Textarea placeholder="Avoid items" value={avoidItems} onChange={(event) => setAvoidItems(event.target.value)} /><Textarea placeholder="Rest/work note" value={restNote} onChange={(event) => setRestNote(event.target.value)} /></div></div>{showReminders && <div className="card p-5"><h2 className="font-bold">WhatsApp Medicine Reminders</h2><p className="mt-1 text-sm text-slate-500">Optional. Do not enable without consent.</p><div className="mt-4"><MedicineReminderSetup items={items} /></div></div>}<PrescriptionPreview patient={patient} items={items} diagnosis={diagnosis} doctorName={doctorName} advice={formatAdvice(advice, dietAdvice, avoidItems, restNote, selectedLabTests)} /></div></div><div className="sticky bottom-3 z-10 flex flex-wrap gap-2 rounded-2xl border bg-white/95 p-3 shadow-card backdrop-blur"><Button loading={loading} onClick={() => void savePrescription()}>Save Prescription</Button><Button loading={loading} icon={<Send className="size-4" />} onClick={() => setSendOpen(true)}>Send Prescription to WhatsApp</Button><Button loading={loading} variant="secondary" onClick={() => void routeToPharmacy()}>Send to Pharmacy</Button><Button variant="secondary" onClick={() => { window.print(); toast.info("Print placeholder opened."); }}>Print</Button><Button variant="secondary" onClick={() => setConsentOpen(true)}>Enable Medicine Reminders</Button><Button loading={loading} onClick={() => void finalizePrescription()}>Complete Consultation</Button>{deliveryStatus !== "queued" && <span className="rounded-full bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">WhatsApp status: {deliveryStatus}</span>}{savedPrescriptionId && <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Saved</span>}</div><PrescriptionWhatsAppModal open={sendOpen} patient={patient} items={items} status={deliveryStatus} onClose={() => setSendOpen(false)} onSend={() => void sendPrescription()} /><ReminderConsentModal open={consentOpen} onClose={() => setConsentOpen(false)} onEnable={() => { setShowReminders(true); setConsentOpen(false); }} /></div>;
 }
 
-function formatAdvice(general: string, diet: string, avoid: string, rest: string) {
+function formatAdvice(general: string, diet: string, avoid: string, rest: string, labTests: string[]) {
   return [
     general && `Advice: ${general}`,
     diet && `Diet: ${diet}`,
     avoid && `Avoid: ${avoid}`,
     rest && `Rest/work: ${rest}`,
+    labTests.length > 0 && `Lab tests: ${labTests.join(", ")}`,
   ].filter(Boolean).join("\n");
 }
 

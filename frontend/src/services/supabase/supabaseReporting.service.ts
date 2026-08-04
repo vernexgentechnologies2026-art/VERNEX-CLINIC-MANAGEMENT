@@ -112,13 +112,26 @@ export const supabaseReportingService: ReportingService = {
 
   async getPatientReport(filters) {
     const scoped = await contextFilters(filters);
-    const rows = await selectRows<Tables<"patients">>("patients", scoped);
+    const [newPatients, allPatients, appointments, consultations] = await Promise.all([
+      selectRows<Tables<"patients">>("patients", scoped),
+      selectRows<Tables<"patients">>("patients", { ...scoped, dateFrom: undefined, dateTo: undefined }),
+      selectRows<Tables<"appointments">>("appointments", scoped, "appointment_date"),
+      selectRows<Tables<"consultations">>("consultations", scoped),
+    ]);
+
+    // A patient counts as "repeat" once they have more than one completed visit.
+    const visitsPerPatient = new Map<string, number>();
+    for (const appointment of appointments) {
+      if (appointment.status !== "completed") continue;
+      visitsPerPatient.set(appointment.patient_id, (visitsPerPatient.get(appointment.patient_id) ?? 0) + 1);
+    }
+
     return {
-      newPatients: rows.length,
-      repeatPatients: 0,
-      vipPatients: rows.filter((item) => String(item.metadata ?? "").includes("vip")).length,
-      followUpPatients: 0,
-      sourceSplit: sourceCount(rows),
+      newPatients: newPatients.length,
+      repeatPatients: Array.from(visitsPerPatient.values()).filter((count) => count > 1).length,
+      vipPatients: allPatients.filter((item) => JSON.stringify(item.metadata ?? {}).toLowerCase().includes("vip")).length,
+      followUpPatients: new Set(consultations.filter((item) => item.follow_up_date).map((item) => item.patient_id)).size,
+      sourceSplit: sourceCount(newPatients),
     };
   },
 
@@ -203,20 +216,74 @@ export const supabaseReportingService: ReportingService = {
 
   async getDoctorPerformanceReport(filters) {
     const scoped = await contextFilters(filters);
-    const [doctors, consultations, prescriptions, invoices] = await Promise.all([
+    const [doctors, consultations, prescriptions, invoices, appointments] = await Promise.all([
       selectRows<Tables<"doctor_profiles">>("doctor_profiles", { ...scoped, dateFrom: undefined, dateTo: undefined }),
       selectRows<Tables<"consultations">>("consultations", scoped),
       selectRows<Tables<"prescriptions">>("prescriptions", scoped),
       selectRows<Tables<"invoices">>("invoices", scoped),
+      selectRows<Tables<"appointments">>("appointments", scoped, "appointment_date"),
     ]);
-    return doctors.map((doctor): DoctorPerformanceReport => ({
-      doctorName: doctor.specialization || doctor.department || `Doctor ${doctor.id.slice(0, 8)}`,
-      consultations: consultations.filter((item) => item.doctor_id === doctor.id).length,
-      revenue: sum(invoices.filter((item) => item.invoice_status !== "cancelled"), (item) => item.paid_amount) / Math.max(doctors.length, 1),
-      averageTime: "0 min",
-      followUps: consultations.filter((item) => item.doctor_id === doctor.id && item.follow_up_date).length,
-      prescriptions: prescriptions.filter((item) => item.doctor_id === doctor.id).length,
-    }));
+
+    const staffIds = Array.from(new Set(doctors.map((doctor) => doctor.staff_id)));
+    const { data: staff } = staffIds.length ? await supabase.from("staff_profiles").select("id,full_name").in("id", staffIds) : { data: [] };
+    const staffNames = new Map((staff ?? []).map((item) => [item.id, item.full_name]));
+
+    // Attribute each invoice to a doctor through its consultation or appointment.
+    const consultationDoctor = new Map(consultations.map((item) => [item.id, item.doctor_id]));
+    const appointmentDoctor = new Map(appointments.map((item) => [item.id, item.doctor_id]));
+    const revenueByDoctor = new Map<string, number>();
+    for (const invoice of invoices) {
+      if (invoice.invoice_status === "cancelled") continue;
+      const doctorId =
+        (invoice.consultation_id ? consultationDoctor.get(invoice.consultation_id) : null) ??
+        (invoice.appointment_id ? appointmentDoctor.get(invoice.appointment_id) : null);
+      if (!doctorId) continue;
+      revenueByDoctor.set(doctorId, (revenueByDoctor.get(doctorId) ?? 0) + (invoice.paid_amount ?? 0));
+    }
+
+    // Average consultation time = time from appointment start to completion.
+    const durationByDoctor = new Map<string, { total: number; count: number }>();
+    for (const consultation of consultations) {
+      if (!consultation.completed_at || !consultation.created_at) continue;
+      const minutes = (new Date(consultation.completed_at).getTime() - new Date(consultation.created_at).getTime()) / 60000;
+      if (!Number.isFinite(minutes) || minutes < 0) continue;
+      const current = durationByDoctor.get(consultation.doctor_id) ?? { total: 0, count: 0 };
+      durationByDoctor.set(consultation.doctor_id, { total: current.total + minutes, count: current.count + 1 });
+    }
+
+    return doctors.map((doctor): DoctorPerformanceReport => {
+      const duration = durationByDoctor.get(doctor.id);
+      return {
+        doctorName: staffNames.get(doctor.staff_id) ?? doctor.specialization ?? doctor.department ?? "Doctor",
+        consultations: consultations.filter((item) => item.doctor_id === doctor.id).length,
+        revenue: revenueByDoctor.get(doctor.id) ?? 0,
+        averageTime: duration && duration.count > 0 ? `${Math.round(duration.total / duration.count)} min` : "0 min",
+        followUps: consultations.filter((item) => item.doctor_id === doctor.id && item.follow_up_date).length,
+        prescriptions: prescriptions.filter((item) => item.doctor_id === doctor.id).length,
+      };
+    });
+  },
+
+  async getFollowUpReport(filters) {
+    const scoped = await contextFilters(filters);
+    const [consultations, appointments, reminders] = await Promise.all([
+      selectRows<Tables<"consultations">>("consultations", { ...scoped, dateFrom: undefined, dateTo: undefined }),
+      selectRows<Tables<"appointments">>("appointments", { ...scoped, dateFrom: undefined, dateTo: undefined }, "appointment_date"),
+      selectRows<Tables<"medicine_reminders">>("medicine_reminders", { ...scoped, dateFrom: undefined, dateTo: undefined }),
+    ]);
+    const today = new Date().toISOString().slice(0, 10);
+    const withFollowUp = consultations.filter((item) => item.follow_up_date);
+    // A follow-up counts as done once the patient completed a later appointment.
+    const isCompleted = (row: Tables<"consultations">) =>
+      appointments.some((appointment) => appointment.patient_id === row.patient_id && appointment.status === "completed" && appointment.appointment_date >= (row.follow_up_date ?? ""));
+
+    return {
+      dueToday: withFollowUp.filter((row) => row.follow_up_date === today && !isCompleted(row)).length,
+      upcoming: withFollowUp.filter((row) => (row.follow_up_date ?? "") > today && !isCompleted(row)).length,
+      overdue: withFollowUp.filter((row) => (row.follow_up_date ?? "") < today && !isCompleted(row)).length,
+      completed: withFollowUp.filter(isCompleted).length,
+      whatsappReminders: reminders.filter((reminder) => reminder.delivery_status !== "failed" && reminder.status === "active").length,
+    };
   },
 
   async generateReportSnapshot(input: ReportSnapshotInput) {

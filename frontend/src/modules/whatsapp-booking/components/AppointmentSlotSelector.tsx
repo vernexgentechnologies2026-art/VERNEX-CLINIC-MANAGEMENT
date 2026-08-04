@@ -1,7 +1,15 @@
 import { Card } from "../../../components/ui";
-import { doctorAvailability } from "../mock";
 
-export function AppointmentSlotSelector({ doctorId }: { doctorId: string }) {
-  const slots = doctorAvailability.find((item) => item.doctorId === doctorId)?.dates[0].slots ?? [];
-  return <Card className="p-4"><p className="font-bold">Time slots</p><div className="mt-3 flex flex-wrap gap-2">{slots.map((slot) => <span key={slot} className="rounded-full bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">{slot}</span>)}</div></Card>;
+export function AppointmentSlotSelector({ slots, selected, onSelect }: { slots: string[]; selected?: string; onSelect?: (slot: string) => void }) {
+  return <Card className="p-4">
+    <p className="font-bold">Time slots</p>
+    {slots.length === 0
+      ? <p className="mt-3 text-sm text-slate-500">No open slots on the selected date.</p>
+      : <div className="mt-3 flex flex-wrap gap-2">{slots.map((slot) => <button
+          key={slot}
+          type="button"
+          onClick={() => onSelect?.(slot)}
+          className={`rounded-full px-3 py-1 text-xs font-bold transition ${slot === selected ? "bg-brand-600 text-white" : "bg-brand-50 text-brand-700 hover:bg-brand-100"}`}
+        >{slot}</button>)}</div>}
+  </Card>;
 }

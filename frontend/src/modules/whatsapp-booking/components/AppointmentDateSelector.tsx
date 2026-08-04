@@ -1,7 +1,16 @@
 import { Card } from "../../../components/ui";
-import { doctorAvailability } from "../mock";
+import type { WhatsAppAvailability } from "../types";
 
-export function AppointmentDateSelector({ doctorId }: { doctorId: string }) {
-  const dates = doctorAvailability.find((item) => item.doctorId === doctorId)?.dates ?? doctorAvailability[0].dates;
-  return <Card className="p-4"><p className="font-bold">Available dates</p><div className="mt-3 grid gap-2 sm:grid-cols-3">{dates.map((date) => <span key={date.date} className="rounded-xl bg-slate-50 p-3 text-sm font-semibold">{date.label}<br /><small>{date.date}</small></span>)}</div></Card>;
+export function AppointmentDateSelector({ dates, selectedDate, onSelect }: { dates: WhatsAppAvailability["dates"]; selectedDate?: string; onSelect?: (date: string) => void }) {
+  return <Card className="p-4">
+    <p className="font-bold">Available dates</p>
+    {dates.length === 0
+      ? <p className="mt-3 text-sm text-slate-500">This doctor has no published availability.</p>
+      : <div className="mt-3 grid gap-2 sm:grid-cols-3">{dates.map((date) => <button
+          key={date.date}
+          type="button"
+          onClick={() => onSelect?.(date.date)}
+          className={`rounded-xl p-3 text-left text-sm font-semibold transition ${date.date === selectedDate ? "bg-brand-600 text-white" : "bg-slate-50 hover:bg-slate-100"}`}
+        >{date.label}<br /><small>{date.date}</small></button>)}</div>}
+  </Card>;
 }

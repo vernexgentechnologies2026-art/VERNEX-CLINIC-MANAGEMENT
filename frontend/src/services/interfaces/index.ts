@@ -9,4 +9,6 @@ export type { BillingDomainService, CreateInvoiceInput, InvoiceFilters, InvoiceW
 export type { WhatsAppConsentStatus, WhatsAppDeliveryStatus, WhatsAppMessageInput, WhatsAppSendPlaceholderInput, WhatsAppService } from "./whatsapp.service";
 export type { MonitoringFilters, MonitoringLog, MonitoringLogInput, MonitoringService, MonitoringSeverity, MonitoringStatus, SystemHealthLog } from "./monitoring.service";
 export type { ConsultationReport, DashboardSummary, LowStockReport, PrescriptionReport, ReportFilters, ReportingService, ReportSnapshotInput } from "./reporting.service";
+export type { BookingServiceOption, CreatePublicBookingInput, PublicBookingResult, PublicBookingService } from "./booking.service";
+export type { CatalogService, ClinicServiceRow, CreatePurchaseEntryInput, CreateRefundInput } from "./catalog.service";
 export type { SupportService } from "./support.service";
