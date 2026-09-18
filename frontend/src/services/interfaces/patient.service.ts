@@ -11,6 +11,8 @@ export type PatientFilters = {
 export interface PatientService {
   getPatients(filters?: string | PatientFilters): Promise<PatientRecord[]>;
   getPatientById(id: string): Promise<PatientRecord>;
+  /** Batch name lookup for list screens -- one query instead of one per id. */
+  getPatientNames(ids: string[]): Promise<Map<string, string>>;
   searchPatients(query: string): Promise<PatientRecord[]>;
   findPatientByPhone(phone: string): Promise<PatientRecord | null>;
   findByWhatsAppNumber(number: string): Promise<PatientRecord | null>;

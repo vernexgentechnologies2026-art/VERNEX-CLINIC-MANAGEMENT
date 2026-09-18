@@ -68,45 +68,26 @@ export default function OwnerDashboard() {
           services.pharmacy.getStockBatches(),
         ]);
 
-        const [patientRows, doctorRows, paymentRows] = await Promise.all([
-          Promise.all(
-            Array.from(new Set(todayAppointments.map((appointment) => appointment.patientId))).map(async (id) => {
-              try {
-                return await services.patients.getPatientById(id);
-              } catch {
-                return null;
-              }
-            }),
-          ),
+        const [doctorRows, paymentRows] = await Promise.all([
           services.doctor.getDoctorProfiles(),
           services.billing.getManualPayments(),
         ]);
 
-        const patientNames = new Map(patientRows.filter(Boolean).map((patient) => [patient!.id, patient!.fullName]));
-        const doctorNames = new Map(
-          await Promise.all(
-            doctorRows.map(async (doctor): Promise<[string, string]> => {
-              try {
-                const staff = await services.users.getStaffUserById(doctor.staff_id);
-                return [doctor.id, staff.fullName];
-              } catch {
-                return [doctor.id, doctor.specialization || doctor.department || "Doctor"];
-              }
-            }),
-          ),
-        );
+        // One lookup per entity type rather than one per row -- this loop used to be
+        // the bulk of the dashboard's request count.
+        const [patientNames, staffNames] = await Promise.all([
+          services.patients.getPatientNames([
+            ...todayAppointments.map((appointment) => appointment.patientId),
+            ...paymentRows.slice(0, 6).map((payment) => payment.patient_id),
+          ]),
+          services.users.getStaffNames(doctorRows.map((doctor) => doctor.staff_id)),
+        ]);
 
-        const recentPaymentPatients = new Map(
-          await Promise.all(
-            Array.from(new Set(paymentRows.slice(0, 6).map((payment) => payment.patient_id))).map(async (id): Promise<[string, string]> => {
-              try {
-                const patient = await services.patients.getPatientById(id);
-                return [id, patient.fullName];
-              } catch {
-                return [id, "Patient"];
-              }
-            }),
-          ),
+        const doctorNames = new Map(
+          doctorRows.map((doctor): [string, string] => [
+            doctor.id,
+            staffNames.get(doctor.staff_id) ?? (doctor.specialization || doctor.department || "Doctor"),
+          ]),
         );
 
         if (!mounted) return;
@@ -129,7 +110,7 @@ export default function OwnerDashboard() {
         setPayments(
           paymentRows.slice(0, 6).map((payment) => ({
             id: payment.id.slice(0, 8).toUpperCase(),
-            patientName: recentPaymentPatients.get(payment.patient_id) ?? "Patient",
+            patientName: patientNames.get(payment.patient_id) ?? "Patient",
             mode: payment.payment_mode,
             amount: payment.amount,
           })),

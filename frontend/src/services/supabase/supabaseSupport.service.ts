@@ -18,6 +18,8 @@ function toTicket(row: TicketRow): SupportTicketRecord {
     priority: priorities.includes(row.priority as SupportTicketRecord["priority"]) ? (row.priority as SupportTicketRecord["priority"]) : "medium",
     status: row.status === "resolved" || row.status === "closed" ? "resolved" : row.status === "in_progress" ? "in_progress" : "open",
     subject: row.subject,
+    description: row.description ?? "",
+    createdAt: row.created_at ?? undefined,
   };
 }
 
@@ -43,6 +45,18 @@ export const supabaseSupportService: SupportService = {
         raised_by: input.createdByUserId || context.staffProfileId,
         status: "open",
       })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return toTicket(data);
+  },
+
+  async updateTicketStatus(id, status) {
+    const dbStatus = status === "resolved" ? "resolved" : status;
+    const { data, error } = await supabase
+      .from("support_tickets")
+      .update({ status: dbStatus, resolved_at: status === "resolved" ? new Date().toISOString() : null })
+      .eq("id", id)
       .select("*")
       .single();
     if (error) throw error;

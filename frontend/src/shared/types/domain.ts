@@ -12,7 +12,7 @@ export type StockStatus = "in_stock" | "low_stock" | "out_of_stock" | "expiring_
 export interface ServiceError { code: string; message: string; fieldErrors?: Record<string, string>; }
 export interface PaginatedResponse<T> { data: T[]; page: number; pageSize: number; total: number; totalPages: number; }
 
-export interface ClinicRecord { id: string; name: string; slug: string; planId: string; status: EntityStatus; ownerUserId: string; enabledModules: ModuleKey[]; address: string; phone: string; city: string; state: string; gstin?: string; }
+export interface ClinicRecord { id: string; name: string; slug: string; planId: string; status: EntityStatus; ownerUserId: string; enabledModules: ModuleKey[]; address: string; phone: string; city: string; state: string; gstin?: string; settings: Record<string, unknown>; }
 export interface BranchRecord { id: string; clinicId: string; name: string; address: string; phone: string; isPrimary: boolean; }
 export interface RoleRecord { id: UserRole; label: string; defaultModules: ModuleKey[]; defaultPermissions: PermissionKey[]; }
 export interface UserRecord { id: string; userId: string; fullName: string; email: string; phone: string; role: UserRole; clinicId?: string; branchIds: string[]; modules: ModuleKey[]; permissions: PermissionKey[]; status: EntityStatus; }
@@ -29,5 +29,5 @@ export interface InvoiceRecord { id: string; clinicId: string; branchId: string;
 export interface PaymentRecord { id: string; invoiceId: string; amount: number; mode: "cash" | "upi" | "card" | "online_link"; status: PaymentStatus; paidAt: string; }
 export interface WhatsAppConversationRecord { id: string; clinicId: string; patientId?: string; phone: string; status: "new" | "in_progress" | "appointment_confirmed" | "transferred_to_reception" | "closed" | "failed"; linkedAppointmentId?: string; lastMessage: string; }
 export interface ReminderRecord { id: string; patientId: string; prescriptionItemId?: string; type: "medicine" | "follow_up" | "appointment"; status: ReminderStatus; deliveryStatus: DeliveryStatus; nextRunAt: string; }
-export interface SupportTicketRecord { id: string; clinicId: string; branchId?: string; createdByUserId: string; category: "technical" | "billing" | "whatsapp" | "pharmacy"; priority: "low" | "medium" | "high"; status: "open" | "in_progress" | "resolved"; subject: string; }
+export interface SupportTicketRecord { id: string; clinicId: string; branchId?: string; createdByUserId: string; category: "technical" | "billing" | "whatsapp" | "pharmacy"; priority: "low" | "medium" | "high"; status: "open" | "in_progress" | "resolved"; subject: string; description?: string; createdAt?: string; }
 export interface ReportRecord { id: string; clinicId: string; metric: string; value: number; period: string; }

@@ -4,23 +4,25 @@ import { canAccess } from "../../access-control/canAccess";
 import type { ModuleKey, PermissionKey, UserRecord } from "../../shared/types/domain";
 import type { UserRole } from "../../types/user";
 export type NavItem = { label: string; path: string; icon: LucideIcon; module: ModuleKey; permission?: PermissionKey };
-export const homeForRole: Record<UserRole, string> = { owner: "/owner/dashboard", receptionist: "/reception/dashboard", doctor: "/doctor/queue", pharmacist: "/pharmacy/dashboard", super_admin: "/super-admin/dashboard" };
+export const homeForRole: Record<UserRole, string> = { owner: "/owner/dashboard", admin: "/owner/dashboard", receptionist: "/reception/dashboard", doctor: "/doctor/queue", pharmacist: "/pharmacy/dashboard", super_admin: "/super-admin/dashboard" };
+const ownerNav: NavItem[] = [
+  { label: "Dashboard", path: "/owner/dashboard", icon: LayoutDashboard, module: "dashboard" }, { label: "Appointments", path: "/reception/appointments", icon: CalendarDays, module: "appointments" },
+  { label: "Patients", path: "/reception/new-patient", icon: Users, module: "patients" },
+  { label: "Reports", path: "/billing/reports", icon: ChartNoAxesCombined, module: "reports" },
+  { label: "Monitoring", path: "/monitoring", icon: Activity, module: "reports" },
+  { label: "Staff", path: "/owner/staff", icon: UserPlus, module: "staff", permission: "manage" },
+  { label: "Settings", path: "/owner/settings", icon: Settings, module: "settings", permission: "configure" }
+];
 export const navForRole: Record<UserRole, NavItem[]> = {
-  owner: [
-    { label: "Dashboard", path: "/owner/dashboard", icon: LayoutDashboard, module: "dashboard" }, { label: "Appointments", path: "/reception/appointments", icon: CalendarDays, module: "appointments" },
-    { label: "Patients", path: "/reception/new-patient", icon: Users, module: "patients" },
-    { label: "Reports", path: "/billing/reports", icon: ChartNoAxesCombined, module: "reports" },
-    { label: "Monitoring", path: "/monitoring", icon: Activity, module: "reports" },
-    { label: "Staff", path: "/owner/staff", icon: UserPlus, module: "staff", permission: "manage" },
-    { label: "Settings", path: "/owner/settings", icon: Settings, module: "settings", permission: "configure" }
-  ],
+  owner: ownerNav,
+  admin: ownerNav,
   receptionist: [
     { label: "Reception Dashboard", path: "/reception/dashboard", icon: LayoutDashboard, module: "dashboard" }, { label: "Appointments", path: "/reception/appointments", icon: CalendarDays, module: "appointments" },
     { label: "Queue", path: "/reception/queue", icon: ClipboardList, module: "appointments" }, { label: "New Patient", path: "/reception/new-patient", icon: UserPlus, module: "patients", permission: "create" }
   ],
   doctor: [
     { label: "Queue", path: "/doctor/queue", icon: ClipboardList, module: "appointments" }, { label: "Availability", path: "/doctor/availability", icon: CalendarDays, module: "availability", permission: "configure" },
-    { label: "Patient Records", path: "/doctor/patient/p1", icon: Users, module: "patients" }
+    { label: "Follow-ups", path: "/doctor/follow-ups", icon: Users, module: "follow_ups" }
   ],
   pharmacist: [
     { label: "Pharmacy Dashboard", path: "/pharmacy/dashboard", icon: LayoutDashboard, module: "pharmacy" },

@@ -19,6 +19,7 @@ function mapClinic(row: ClinicRow, enabledModules: ModuleKey[] = []): ClinicReco
     phone: row.phone ?? "",
     city: "",
     state: "",
+    settings: (row.settings as Record<string, unknown>) ?? {},
   };
 }
 

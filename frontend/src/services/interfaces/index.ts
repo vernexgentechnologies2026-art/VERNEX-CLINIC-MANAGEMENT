@@ -1,6 +1,6 @@
 export type { AuthService, StaffAuthContext } from "./auth.service";
 export type { ClinicService } from "./clinic.service";
-export type { UserService } from "./user.service";
+export type { UserService, CreateStaffLoginInput } from "./user.service";
 export type { AppointmentService, AppointmentFilters, CreateAppointmentInput } from "./appointment.service";
 export type { PatientService, PatientFilters } from "./patient.service";
 export type { DoctorDomainService, ConsultationFilters, CreatePrescriptionWithItemsInput, PrescriptionFilters, PrescriptionWithItemsResult } from "./doctor.service";

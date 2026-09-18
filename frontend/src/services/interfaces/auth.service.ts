@@ -25,6 +25,8 @@ export interface AuthService {
   getSession(): Promise<unknown>;
   getCurrentStaffProfile(): Promise<unknown>;
   getCurrentAuthContext(): Promise<StaffAuthContext>;
+  /** Drops the cached context and rebuilds it. Call after changing clinic or access data. */
+  refreshAuthContext(): Promise<StaffAuthContext>;
   getCurrentUser(role?: UserRole): Promise<UserRecord>;
   loginAsRole(role: UserRole): Promise<UserRecord>;
   logout(): Promise<void>;

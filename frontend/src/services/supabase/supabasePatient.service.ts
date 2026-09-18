@@ -64,6 +64,14 @@ export const supabasePatientService: PatientService = {
     return mapPatient(data);
   },
 
+  async getPatientNames(ids) {
+    const unique = Array.from(new Set(ids.filter(Boolean)));
+    if (unique.length === 0) return new Map<string, string>();
+    const { data, error } = await supabase.from("patients").select("id, full_name").in("id", unique);
+    if (error) throw error;
+    return new Map((data ?? []).map((row) => [row.id, row.full_name]));
+  },
+
   searchPatients(query) {
     return this.getPatients({ query });
   },

@@ -7,7 +7,7 @@ import { services } from "../../services/serviceProvider";
 import type { BranchRecord, ClinicRecord, ModuleKey, UserRecord } from "../../shared/types/domain";
 import type { UserRole } from "../../types/user";
 
-const roles: UserRole[] = ["owner", "receptionist", "doctor", "pharmacist", "super_admin"];
+const roles: UserRole[] = ["owner", "admin", "receptionist", "doctor", "pharmacist", "super_admin"];
 
 export default function SuperAdminDashboard() {
   const [clinics, setClinics] = useState<ClinicRecord[]>([]);
