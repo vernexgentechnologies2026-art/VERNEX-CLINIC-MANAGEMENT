@@ -95,6 +95,25 @@ export const supabaseAppointmentService: AppointmentService = {
     return mapAppointment(data);
   },
 
+  async bookForPatient(input) {
+    const payload = {
+      patient_id: input.patientId,
+      doctor_id: input.doctorId,
+      appointment_date: input.appointmentDate,
+      appointment_time: input.appointmentTime ?? null,
+      slot_id: input.slotId ?? null,
+      department: input.department ?? null,
+      main_problem: input.mainProblem ?? null,
+      source: input.source ?? "reception",
+      is_new_patient: input.isNewPatient ?? false,
+      metadata: input.metadata ?? {},
+    };
+    const { data, error } = await supabase.rpc("book_appointment_for_patient", { input: payload as unknown as Json });
+    if (error) throw error;
+    logAuditEvent({ clinicId: data.clinic_id, branchId: data.branch_id, eventType: "appointment_created", entityType: "appointments", entityId: data.id, action: "create", status: "success", severity: "info", message: "Appointment booked.", metadata: { source: data.source, token: data.token_number } });
+    return mapAppointment(data);
+  },
+
   async assignDoctor(appointmentId, doctorId, slotId) {
     const context = await supabaseAuthService.getCurrentAuthContext();
     const { data: slot, error: slotError } = await supabase.from("appointment_slots").select("*").eq("id", slotId).single();

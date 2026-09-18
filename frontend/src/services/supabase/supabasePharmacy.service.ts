@@ -2,6 +2,7 @@ import { supabase } from "../../lib/supabaseClient";
 import type { InventoryRecord, MedicineRecord, PharmacyOrderRecord, StockStatus } from "../../shared/types/domain";
 import type { Json, Tables, TablesInsert, TablesUpdate } from "../../shared/types/database.types";
 import type { DispenseOrderInput, MedicineFilters, PharmacyDomainService, PharmacyQueueItem } from "../interfaces";
+import type { PharmacyBill } from "../../modules/pharmacy/types";
 import { logAuditEvent } from "./auditLogger";
 import { supabaseAuthService } from "./supabaseAuth.service";
 
@@ -207,5 +208,44 @@ export const supabasePharmacyDomainService: PharmacyDomainService = {
     const { data, error } = await query;
     if (error) throw error;
     return (data ?? []).map(mapOrder);
+  },
+
+  async getPharmacyBills(dateFrom) {
+    let query = supabase.from("invoices").select("*").eq("invoice_type", "pharmacy").order("created_at", { ascending: false }).limit(50);
+    if (dateFrom) query = query.gte("created_at", `${dateFrom}T00:00:00`);
+    const { data: invoices, error } = await query;
+    if (error) throw error;
+    const rows = invoices ?? [];
+    if (rows.length === 0) return [];
+
+    const invoiceIds = rows.map((row) => row.id);
+    const [{ data: items }, { data: patients }, { data: payments }] = await Promise.all([
+      supabase.from("invoice_items").select("*").in("invoice_id", invoiceIds),
+      supabase.from("patients").select("id,full_name").in("id", Array.from(new Set(rows.map((row) => row.patient_id)))),
+      supabase.from("manual_payment_records").select("invoice_id,payment_mode").in("invoice_id", invoiceIds),
+    ]);
+    const patientNames = new Map((patients ?? []).map((patient) => [patient.id, patient.full_name]));
+    const modes = new Map((payments ?? []).map((payment) => [payment.invoice_id, payment.payment_mode]));
+
+    return rows.map((row): PharmacyBill => ({
+      id: row.invoice_number || row.id,
+      patientName: patientNames.get(row.patient_id) ?? "Patient",
+      doctorName: "",
+      prescriptionId: row.prescription_id ?? undefined,
+      subtotal: row.subtotal ?? 0,
+      discount: row.discount_amount ?? 0,
+      total: row.total_amount ?? 0,
+      paymentMode: (modes.get(row.id) ?? "cash") as PharmacyBill["paymentMode"],
+      paymentStatus: row.payment_status === "paid" ? "paid" : row.payment_status === "partial" ? "partial" : "pending",
+      createdAt: row.created_at?.slice(0, 16).replace("T", " ") ?? "",
+      items: (items ?? [])
+        .filter((item) => item.invoice_id === row.id)
+        .map((item) => ({
+          medicineName: item.description,
+          quantity: item.quantity ?? 1,
+          unitPrice: item.unit_price ?? 0,
+          discount: item.discount_amount ?? 0,
+        })),
+    }));
   },
 };

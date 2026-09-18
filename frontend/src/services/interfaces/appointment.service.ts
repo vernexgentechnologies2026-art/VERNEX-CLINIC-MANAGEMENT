@@ -11,6 +11,22 @@ export interface AppointmentService {
   getQueue(): Promise<AppointmentRecord[]>;
   createAppointment(input: CreateAppointmentInput): Promise<AppointmentRecord>;
   bookAppointmentWithSlot(input: Record<string, unknown>): Promise<AppointmentRecord>;
+  /**
+   * Books a patient with a doctor by date (and optionally time), generating the
+   * doctor's slots and the day's token number automatically.
+   */
+  bookForPatient(input: {
+    patientId: string;
+    doctorId: string;
+    appointmentDate: string;
+    appointmentTime?: string;
+    slotId?: string;
+    department?: string;
+    mainProblem?: string;
+    source?: string;
+    isNewPatient?: boolean;
+    metadata?: Record<string, unknown>;
+  }): Promise<AppointmentRecord>;
   assignDoctor(appointmentId: string, doctorId: string, slotId: string): Promise<AppointmentRecord>;
   updateAppointmentStatus(id: string, status: AppointmentStatus): Promise<AppointmentRecord>;
   cancelAppointment(id: string, reason: string): Promise<AppointmentRecord>;

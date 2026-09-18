@@ -7,7 +7,7 @@ import type { AuthService, StaffAuthContext } from "../interfaces";
 
 type StaffProfileRow = Tables<"staff_profiles">;
 
-const roleKeys: UserRole[] = ["owner", "receptionist", "doctor", "pharmacist", "super_admin"];
+const roleKeys: UserRole[] = ["owner", "admin", "receptionist", "doctor", "pharmacist", "super_admin"];
 
 function asRole(role: string): UserRole {
   if (roleKeys.includes(role as UserRole)) return role as UserRole;
@@ -89,6 +89,65 @@ async function loadCurrentStaffProfile() {
   return data;
 }
 
+// Building an auth context costs eight round trips, and nearly every service method
+// asks for one -- a single dashboard render used to rebuild it a dozen times over.
+// Callers share one in-flight request, and the resolved value is reused briefly so
+// that a burst of parallel loads pays for it once. The window is short so a module
+// or permission change by an admin still lands without a re-login.
+const AUTH_CONTEXT_TTL_MS = 60_000;
+let cachedContext: { userId: string; expiresAt: number; promise: Promise<StaffAuthContext> } | null = null;
+
+function invalidateAuthContext() {
+  cachedContext = null;
+}
+
+supabase.auth.onAuthStateChange(() => invalidateAuthContext());
+
+async function buildAuthContext(): Promise<StaffAuthContext> {
+  const session = await requireSession();
+  const profile = await loadCurrentStaffProfile();
+  const role_key = asRole(profile.role_key);
+
+  const [{ data: clinic }, { data: branch }, { data: clinicModules }, { data: staffModules }, { data: roleModules }, { data: staffPermissions }, { data: rolePermissions }] = await Promise.all([
+    profile.clinic_id ? supabase.from("clinics").select("*").eq("id", profile.clinic_id).maybeSingle() : Promise.resolve({ data: null }),
+    profile.branch_id ? supabase.from("branches").select("*").eq("id", profile.branch_id).maybeSingle() : Promise.resolve({ data: null }),
+    profile.clinic_id ? supabase.from("clinic_modules").select("module_key, enabled").eq("clinic_id", profile.clinic_id).eq("enabled", true) : Promise.resolve({ data: [] }),
+    supabase.from("staff_modules").select("module_key, enabled").eq("staff_id", profile.id),
+    supabase.from("role_modules").select("module_key, enabled").eq("role_key", role_key).eq("enabled", true),
+    supabase.from("staff_permissions").select("permission_key, allowed").eq("staff_id", profile.id),
+    supabase.from("role_permissions").select("permission_key, allowed").eq("role_key", role_key).eq("allowed", true),
+  ]);
+
+  const clinicModuleSet = new Set((clinicModules ?? []).map((item) => item.module_key));
+  const ownModuleRows = staffModules ?? [];
+  const baseModules = ownModuleRows.length > 0 ? ownModuleRows.filter((item) => item.enabled).map((item) => item.module_key) : (roleModules ?? []).map((item) => item.module_key);
+  const enabledModules = (role_key === "super_admin" ? baseModules : baseModules.filter((key) => clinicModuleSet.has(key))) as ModuleKey[];
+
+  const ownPermissionRows = staffPermissions ?? [];
+  const allowedPermissions = ownPermissionRows.length > 0 ? ownPermissionRows.filter((item) => item.allowed).map((item) => item.permission_key) : (rolePermissions ?? []).map((item) => item.permission_key);
+
+  const context: StaffAuthContext = {
+    authUserId: session.user.id,
+    staffProfileId: profile.id,
+    fullName: profile.full_name,
+    user_id: profile.user_id,
+    email: profile.email,
+    phone: profile.phone,
+    role_key,
+    clinic_id: profile.clinic_id,
+    branch_id: profile.branch_id,
+    enabledModules,
+    allowedPermissions,
+    status: profile.status,
+    clinic: clinic ?? null,
+    branch: branch ?? null,
+    session,
+  };
+
+  cacheAuthContext(context);
+  return context;
+}
+
 export const supabaseAuthService: AuthService = {
   async signInWithPassword(userIdOrEmail, password) {
     const email = await resolveEmail(userIdOrEmail);
@@ -124,47 +183,22 @@ export const supabaseAuthService: AuthService = {
 
   async getCurrentAuthContext() {
     const session = await requireSession();
-    const profile = await loadCurrentStaffProfile();
-    const role_key = asRole(profile.role_key);
+    const now = Date.now();
+    if (cachedContext && cachedContext.userId === session.user.id && cachedContext.expiresAt > now) {
+      return cachedContext.promise;
+    }
+    const promise = buildAuthContext().catch((error) => {
+      // Never cache a failure -- the next caller should retry.
+      if (cachedContext?.promise === promise) invalidateAuthContext();
+      throw error;
+    });
+    cachedContext = { userId: session.user.id, expiresAt: now + AUTH_CONTEXT_TTL_MS, promise };
+    return promise;
+  },
 
-    const [{ data: clinic }, { data: branch }, { data: clinicModules }, { data: staffModules }, { data: roleModules }, { data: staffPermissions }, { data: rolePermissions }] = await Promise.all([
-      profile.clinic_id ? supabase.from("clinics").select("*").eq("id", profile.clinic_id).maybeSingle() : Promise.resolve({ data: null }),
-      profile.branch_id ? supabase.from("branches").select("*").eq("id", profile.branch_id).maybeSingle() : Promise.resolve({ data: null }),
-      profile.clinic_id ? supabase.from("clinic_modules").select("module_key, enabled").eq("clinic_id", profile.clinic_id).eq("enabled", true) : Promise.resolve({ data: [] }),
-      supabase.from("staff_modules").select("module_key, enabled").eq("staff_id", profile.id),
-      supabase.from("role_modules").select("module_key, enabled").eq("role_key", role_key).eq("enabled", true),
-      supabase.from("staff_permissions").select("permission_key, allowed").eq("staff_id", profile.id),
-      supabase.from("role_permissions").select("permission_key, allowed").eq("role_key", role_key).eq("allowed", true),
-    ]);
-
-    const clinicModuleSet = new Set((clinicModules ?? []).map((item) => item.module_key));
-    const ownModuleRows = staffModules ?? [];
-    const baseModules = ownModuleRows.length > 0 ? ownModuleRows.filter((item) => item.enabled).map((item) => item.module_key) : (roleModules ?? []).map((item) => item.module_key);
-    const enabledModules = (role_key === "super_admin" ? baseModules : baseModules.filter((key) => clinicModuleSet.has(key))) as ModuleKey[];
-
-    const ownPermissionRows = staffPermissions ?? [];
-    const allowedPermissions = ownPermissionRows.length > 0 ? ownPermissionRows.filter((item) => item.allowed).map((item) => item.permission_key) : (rolePermissions ?? []).map((item) => item.permission_key);
-
-    const context: StaffAuthContext = {
-      authUserId: session.user.id,
-      staffProfileId: profile.id,
-      fullName: profile.full_name,
-      user_id: profile.user_id,
-      email: profile.email,
-      phone: profile.phone,
-      role_key,
-      clinic_id: profile.clinic_id,
-      branch_id: profile.branch_id,
-      enabledModules,
-      allowedPermissions,
-      status: profile.status,
-      clinic: clinic ?? null,
-      branch: branch ?? null,
-      session,
-    };
-
-    cacheAuthContext(context);
-    return context;
+  async refreshAuthContext() {
+    invalidateAuthContext();
+    return this.getCurrentAuthContext();
   },
 
   async getCurrentUser() {

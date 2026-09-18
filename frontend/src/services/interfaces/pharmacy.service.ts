@@ -1,5 +1,6 @@
 import type { InventoryRecord, MedicineRecord, PharmacyOrderRecord } from "../../shared/types/domain";
 import type { Tables, TablesInsert, TablesUpdate } from "../../shared/types/database.types";
+import type { PharmacyBill } from "../../modules/pharmacy/types";
 
 export type MedicineFilters = {
   clinicId?: string;
@@ -36,4 +37,6 @@ export interface PharmacyDomainService {
   getStockMovements(medicineId?: string): Promise<Tables<"stock_movements">[]>;
   getInventory(branchId?: string): Promise<InventoryRecord[]>;
   getPharmacyOrders(branchId?: string): Promise<PharmacyOrderRecord[]>;
+  /** Pharmacy counter bills, i.e. invoices of type "pharmacy" with their line items. */
+  getPharmacyBills(dateFrom?: string): Promise<PharmacyBill[]>;
 }

@@ -7,7 +7,7 @@ import type { UserRole } from "../../types/user";
 import { BrandLogo } from "../common/BrandLogo";
 import { getNavigationForUser } from "./navigation";
 
-const roleLabel: Record<UserRole, string> = { owner: "Owner Workspace", receptionist: "Reception Desk", doctor: "Doctor Workspace", pharmacist: "Pharmacy", super_admin: "Platform Admin" };
+const roleLabel: Record<UserRole, string> = { owner: "Owner Workspace", admin: "Admin Workspace", receptionist: "Reception Desk", doctor: "Doctor Workspace", pharmacist: "Pharmacy", super_admin: "Platform Admin" };
 
 export function Sidebar({ role, mobileOpen, collapsed, close, toggleCollapsed }: { role: UserRole; mobileOpen: boolean; collapsed: boolean; close: () => void; toggleCollapsed: () => void }) {
   const [accessContext, setAccessContext] = useState<{ user: UserRecord; enabledClinicModules: ModuleKey[] } | null>(null);

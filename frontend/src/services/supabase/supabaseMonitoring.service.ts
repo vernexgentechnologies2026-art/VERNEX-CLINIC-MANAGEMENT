@@ -1,5 +1,4 @@
 import { supabase } from "../../lib/supabaseClient";
-import { mockMonitoringService } from "../mock/mockMonitoring.service";
 import type { MonitoringFilters, MonitoringLog, MonitoringLogInput, MonitoringService, SystemHealthLog } from "../interfaces";
 import { supabaseAuthService } from "./supabaseAuth.service";
 
@@ -81,33 +80,39 @@ async function select(table: string, filters?: MonitoringFilters) {
   return (data ?? []).map(mapLog);
 }
 
-function fallback<T>(operation: () => Promise<T>, backup: () => Promise<T>) {
-  return operation().catch(() => backup());
+/**
+ * Writing a log line must never break the user-facing action that triggered it,
+ * so log* swallows its error. Read paths surface errors to the caller.
+ */
+function ignoreWriteFailure(operation: Promise<void>) {
+  return operation.catch((error) => {
+    if (import.meta.env.DEV) console.warn("Monitoring log write failed:", error);
+  });
 }
 
 export const supabaseMonitoringService: MonitoringService = {
   logAuditEvent(input) {
-    return fallback(() => insert("audit_logs", input), () => mockMonitoringService.logAuditEvent(input));
+    return ignoreWriteFailure(insert("audit_logs", input));
   },
   logSecurityEvent(input) {
-    return fallback(() => insert("security_events", { ...input, eventType: input.eventType || "security_event", severity: input.severity ?? "warning", status: input.status ?? "recorded" }), () => mockMonitoringService.logSecurityEvent(input));
+    return ignoreWriteFailure(insert("security_events", { ...input, eventType: input.eventType || "security_event", severity: input.severity ?? "warning", status: input.status ?? "recorded" }));
   },
   logAppError(input) {
-    return fallback(() => insert("app_error_logs", { ...input, eventType: input.eventType || "app_error", severity: input.severity ?? "error", status: input.status ?? "open" }), () => mockMonitoringService.logAppError(input));
+    return ignoreWriteFailure(insert("app_error_logs", { ...input, eventType: input.eventType || "app_error", severity: input.severity ?? "error", status: input.status ?? "open" }));
   },
   logHealthCheck(input) {
-    return fallback(() => insert("system_health_checks", { ...input, eventType: input.eventType || "health_check", status: input.status ?? "ok" }), () => mockMonitoringService.logHealthCheck(input));
+    return ignoreWriteFailure(insert("system_health_checks", { ...input, eventType: input.eventType || "health_check", status: input.status ?? "ok" }));
   },
   getAuditLogs(filters) {
-    return fallback(() => select("audit_logs", filters), () => mockMonitoringService.getAuditLogs(filters));
+    return select("audit_logs", filters);
   },
   getSystemHealth(filters) {
-    return fallback(() => select("system_health_checks", filters) as Promise<SystemHealthLog[]>, () => mockMonitoringService.getSystemHealth(filters));
+    return select("system_health_checks", filters) as Promise<SystemHealthLog[]>;
   },
   getErrorLogs(filters) {
-    return fallback(() => select("app_error_logs", filters), () => mockMonitoringService.getErrorLogs(filters));
+    return select("app_error_logs", filters);
   },
   getSecurityEvents(filters) {
-    return fallback(() => select("security_events", filters), () => mockMonitoringService.getSecurityEvents(filters));
+    return select("security_events", filters);
   },
 };

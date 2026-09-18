@@ -1,6 +1,6 @@
 import type { ReportRecord } from "../../shared/types/domain";
 import type { Tables, TablesInsert } from "../../shared/types/database.types";
-import type { AppointmentReport, DoctorPerformanceReport, PatientReport, PharmacySalesReport, RevenueReport } from "../../modules/billing/types";
+import type { AppointmentReport, DoctorPerformanceReport, FollowUpReport, PatientReport, PharmacySalesReport, RevenueReport } from "../../modules/billing/types";
 
 export type ReportFilters = {
   clinicId?: string;
@@ -59,6 +59,7 @@ export interface ReportingService {
   getRevenueSummary(filters?: ReportFilters): Promise<RevenueReport>;
   getLowStockReport(filters?: ReportFilters): Promise<LowStockReport>;
   getDoctorPerformanceReport(filters?: ReportFilters): Promise<DoctorPerformanceReport[]>;
+  getFollowUpReport(filters?: ReportFilters): Promise<FollowUpReport>;
   generateReportSnapshot(input: ReportSnapshotInput): Promise<Tables<"report_snapshots">>;
   getReportSnapshots(filters?: ReportFilters & { reportType?: string }): Promise<Tables<"report_snapshots">[]>;
 }

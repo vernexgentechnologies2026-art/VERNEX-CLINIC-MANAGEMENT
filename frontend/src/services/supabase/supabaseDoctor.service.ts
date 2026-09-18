@@ -2,6 +2,7 @@ import { supabase } from "../../lib/supabaseClient";
 import type { ConsultationRecord, DeliveryStatus, DoctorAvailabilityRecord, PrescriptionItemRecord, PrescriptionRecord, ReminderRecord, ReminderStatus } from "../../shared/types/domain";
 import type { Json, Tables, TablesInsert, TablesUpdate } from "../../shared/types/database.types";
 import type { ConsultationFilters, CreatePrescriptionWithItemsInput, DoctorDomainService, PrescriptionFilters, PrescriptionWithItemsResult } from "../interfaces";
+import type { FollowUp, FollowUpStatus, MedicineReminderSchedule, PatientTag, PatientTimelineItem, Prescription } from "../../modules/doctor/types";
 import { logAuditEvent } from "./auditLogger";
 import { supabaseAuthService } from "./supabaseAuth.service";
 
@@ -470,4 +471,219 @@ export const supabaseDoctorDomainService: DoctorDomainService = {
   async getReminders(patientId) {
     return this.getMedicineReminders(patientId);
   },
+
+  async getFollowUps(doctorId) {
+    let query = supabase
+      .from("consultations")
+      .select("*")
+      .not("follow_up_date", "is", null)
+      .order("follow_up_date", { ascending: true });
+    if (doctorId) query = query.eq("doctor_id", doctorId);
+    const { data: consultations, error } = await query;
+    if (error) throw error;
+    const rows = consultations ?? [];
+    if (rows.length === 0) return [];
+
+    const patientIds = Array.from(new Set(rows.map((row) => row.patient_id)));
+    const [{ data: patients, error: patientError }, { data: laterAppointments, error: appointmentError }] = await Promise.all([
+      supabase.from("patients").select("id,full_name,phone,whatsapp_number").in("id", patientIds),
+      supabase.from("appointments").select("patient_id,appointment_date,status").in("patient_id", patientIds),
+    ]);
+    if (patientError) throw patientError;
+    if (appointmentError) throw appointmentError;
+
+    const patientMap = new Map((patients ?? []).map((patient) => [patient.id, patient]));
+    const today = isoDate(new Date());
+
+    return rows.map((row): FollowUp => {
+      const patient = patientMap.get(row.patient_id);
+      const followUpDate = row.follow_up_date ?? "";
+      // A follow-up counts as done once the patient has any appointment on/after the due date.
+      const attended = (laterAppointments ?? []).some(
+        (appointment) => appointment.patient_id === row.patient_id && appointment.appointment_date >= followUpDate && appointment.status === "completed",
+      );
+      const status: FollowUpStatus = attended ? "completed" : followUpDate === today ? "due_today" : followUpDate < today ? "overdue" : "upcoming";
+      return {
+        id: row.id,
+        patientId: row.patient_id,
+        patientName: patient?.full_name ?? "Patient",
+        phone: patient?.whatsapp_number || patient?.phone || "",
+        lastDiagnosis: row.diagnosis || "Consultation",
+        followUpDate,
+        reason: row.follow_up_reason || "Review visit",
+        status,
+        reminderStatus: attended ? "completed" : "scheduled",
+        whatsappDeliveryStatus: "queued",
+        patientResponseStatus: attended ? "confirmed" : "no_response",
+      };
+    });
+  },
+
+  async getMedicineReminderSchedules(doctorId) {
+    let query = supabase.from("medicine_reminders").select("*").in("status", ["active", "paused"]).order("next_run_at", { ascending: true });
+    const { data: reminders, error } = await query;
+    if (error) throw error;
+    let rows = reminders ?? [];
+    if (rows.length === 0) return [];
+
+    const prescriptionIds = Array.from(new Set(rows.map((row) => row.prescription_id)));
+    const { data: prescriptions, error: prescriptionError } = await supabase.from("prescriptions").select("id,doctor_id").in("id", prescriptionIds);
+    if (prescriptionError) throw prescriptionError;
+    if (doctorId) {
+      const owned = new Set((prescriptions ?? []).filter((item) => item.doctor_id === doctorId).map((item) => item.id));
+      rows = rows.filter((row) => owned.has(row.prescription_id));
+      if (rows.length === 0) return [];
+    }
+
+    const { data: patients, error: patientError } = await supabase
+      .from("patients")
+      .select("id,full_name,phone,whatsapp_number,reminder_consent")
+      .in("id", Array.from(new Set(rows.map((row) => row.patient_id))));
+    if (patientError) throw patientError;
+    const patientMap = new Map((patients ?? []).map((patient) => [patient.id, patient]));
+
+    const grouped = new Map<string, MedicineReminderSchedule>();
+    for (const row of rows) {
+      const key = `${row.patient_id}:${row.prescription_id}`;
+      const patient = patientMap.get(row.patient_id);
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.activeMedicines.push(row.medicine_name);
+        continue;
+      }
+      grouped.set(key, {
+        id: key,
+        patientName: patient?.full_name ?? "Patient",
+        phone: patient?.whatsapp_number || patient?.phone || "",
+        prescriptionId: row.prescription_id,
+        activeMedicines: [row.medicine_name],
+        nextReminder: row.next_run_at ? new Date(row.next_run_at).toLocaleString() : "Not scheduled",
+        duration: row.end_date ? `${row.start_date} to ${row.end_date}` : `From ${row.start_date}`,
+        consent: row.consent_confirmed && patient?.reminder_consent ? "confirmed" : "not_received",
+        status: (row.status ?? "active") as ReminderStatus,
+      });
+    }
+    return Array.from(grouped.values());
+  },
+
+  async getPatientProfile(patientId) {
+    const { data: patient, error } = await supabase.from("patients").select("*").eq("id", patientId).single();
+    if (error) throw error;
+
+    const [{ data: appointments }, { data: consultations }, { data: invoices }] = await Promise.all([
+      supabase.from("appointments").select("appointment_date,status").eq("patient_id", patientId).order("appointment_date", { ascending: false }),
+      supabase.from("consultations").select("created_at").eq("patient_id", patientId).order("created_at", { ascending: false }).limit(1),
+      supabase.from("invoices").select("balance_amount,invoice_status").eq("patient_id", patientId),
+    ]);
+
+    const completed = (appointments ?? []).filter((appointment) => appointment.status === "completed");
+    const pendingBalance = (invoices ?? []).filter((invoice) => invoice.invoice_status !== "cancelled").reduce((total, invoice) => total + (invoice.balance_amount ?? 0), 0);
+    const age = patient.age ?? 0;
+    const tags: PatientTag[] = [];
+    if (completed.length === 0) tags.push("New Patient");
+    else if (completed.length > 3) tags.push("Regular");
+    else tags.push("Follow-up");
+    if (age >= 60) tags.push("Senior Citizen");
+    if (age > 0 && age < 13) tags.push("Child");
+
+    return {
+      id: patient.id,
+      name: patient.full_name,
+      phone: patient.whatsapp_number || patient.phone,
+      age,
+      gender: patient.gender ?? "other",
+      bloodGroup: patient.blood_group ?? "",
+      tags,
+      lastVisit: completed[0]?.appointment_date ?? consultations?.[0]?.created_at?.slice(0, 10) ?? "No previous visit",
+      allergies: splitList(patient.allergies),
+      conditions: splitList(patient.existing_conditions ?? patient.medical_history),
+      medications: splitList(patient.current_medications),
+      emergencyContact: [patient.emergency_contact_name, patient.emergency_contact_phone].filter(Boolean).join(" - "),
+      totalVisits: completed.length,
+      pendingPayment: pendingBalance > 0,
+      internalNotes: patient.medical_history ?? "",
+    };
+  },
+
+  async getPatientTimeline(patientId) {
+    const { data: consultations, error } = await supabase.from("consultations").select("*").eq("patient_id", patientId).order("created_at", { ascending: false });
+    if (error) throw error;
+    const rows = consultations ?? [];
+    if (rows.length === 0) return [];
+
+    const [{ data: prescriptions }, { data: invoices }, { data: doctors }] = await Promise.all([
+      supabase.from("prescriptions").select("id,consultation_id").eq("patient_id", patientId),
+      supabase.from("invoices").select("consultation_id,payment_status").eq("patient_id", patientId),
+      supabase.from("doctor_profiles").select("id,staff_id").in("id", Array.from(new Set(rows.map((row) => row.doctor_id)))),
+    ]);
+    const staffIds = Array.from(new Set((doctors ?? []).map((doctor) => doctor.staff_id)));
+    const { data: staff } = staffIds.length ? await supabase.from("staff_profiles").select("id,full_name").in("id", staffIds) : { data: [] };
+    const staffNames = new Map((staff ?? []).map((item) => [item.id, item.full_name]));
+    const doctorNames = new Map((doctors ?? []).map((doctor) => [doctor.id, staffNames.get(doctor.staff_id) ?? "Doctor"]));
+
+    const prescriptionCount = new Map<string, number>();
+    for (const prescription of prescriptions ?? []) {
+      if (!prescription.consultation_id) continue;
+      prescriptionCount.set(prescription.consultation_id, (prescriptionCount.get(prescription.consultation_id) ?? 0) + 1);
+    }
+    const paymentStatus = new Map((invoices ?? []).filter((invoice) => invoice.consultation_id).map((invoice) => [invoice.consultation_id as string, invoice.payment_status]));
+
+    return rows.map((row): PatientTimelineItem => ({
+      id: row.id,
+      date: row.created_at?.slice(0, 10) ?? "",
+      doctor: doctorNames.get(row.doctor_id) ?? "Doctor",
+      diagnosis: row.diagnosis || "Consultation",
+      prescriptionSummary: prescriptionCount.get(row.id) ? `${prescriptionCount.get(row.id)} prescription(s)` : "No prescription",
+      followUpStatus: row.follow_up_date ? `Follow-up ${row.follow_up_date}` : "No follow-up",
+      paymentStatus: paymentStatus.get(row.id) ?? "not billed",
+    }));
+  },
+
+  async getPatientPrescriptionHistory(patientId) {
+    const { data: prescriptions, error } = await supabase.from("prescriptions").select("*").eq("patient_id", patientId).order("created_at", { ascending: false }).limit(10);
+    if (error) throw error;
+    const rows = prescriptions ?? [];
+    if (rows.length === 0) return [];
+
+    const [{ data: items }, { data: doctors }] = await Promise.all([
+      supabase.from("prescription_items").select("*").in("prescription_id", rows.map((row) => row.id)).order("sort_order", { ascending: true }),
+      supabase.from("doctor_profiles").select("id,staff_id").in("id", Array.from(new Set(rows.map((row) => row.doctor_id)))),
+    ]);
+    const staffIds = Array.from(new Set((doctors ?? []).map((doctor) => doctor.staff_id)));
+    const { data: staff } = staffIds.length ? await supabase.from("staff_profiles").select("id,full_name").in("id", staffIds) : { data: [] };
+    const staffNames = new Map((staff ?? []).map((item) => [item.id, item.full_name]));
+    const doctorNames = new Map((doctors ?? []).map((doctor) => [doctor.id, staffNames.get(doctor.staff_id) ?? "Doctor"]));
+
+    return rows.map((row): Prescription => ({
+      id: row.id,
+      patientId: row.patient_id,
+      doctorName: doctorNames.get(row.doctor_id) ?? "Doctor",
+      diagnosis: row.diagnosis_summary ?? "",
+      date: row.created_at?.slice(0, 10) ?? "",
+      advice: row.advice ?? undefined,
+      labTests: [],
+      followUpDate: row.follow_up_date ?? undefined,
+      whatsappDeliveryStatus: (row.delivery_status ?? "queued") as DeliveryStatus,
+      items: (items ?? [])
+        .filter((item) => item.prescription_id === row.id)
+        .map((item) => ({
+          id: item.id,
+          medicineName: item.medicine_name,
+          dosage: item.dosage ?? "",
+          frequency: item.frequency ?? "",
+          timing: item.timing ?? "",
+          duration: item.duration ?? "",
+          instructions: item.instructions ?? undefined,
+          quantity: item.quantity ?? undefined,
+        })),
+    }));
+  },
 };
+
+function splitList(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(/[,;\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}

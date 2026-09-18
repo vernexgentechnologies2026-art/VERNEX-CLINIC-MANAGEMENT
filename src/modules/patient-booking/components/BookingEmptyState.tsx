@@ -1,2 +1,0 @@
-import { CalendarX } from "lucide-react";
-export function BookingEmptyState({ title = "No slots available", description = "Please try another date or call the clinic." }: { title?: string; description?: string }) { return <div className="rounded-3xl border border-dashed bg-white p-8 text-center"><CalendarX className="mx-auto size-9 text-slate-400" /><h3 className="mt-3 font-bold">{title}</h3><p className="mt-1 text-sm text-slate-500">{description}</p></div>; }

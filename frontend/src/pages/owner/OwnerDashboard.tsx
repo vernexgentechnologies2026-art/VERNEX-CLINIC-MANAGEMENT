@@ -1,29 +1,183 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { CalendarCheck, CircleDollarSign, Clock3, Pill, UserPlus, Users, WalletCards, Waypoints } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { appointments, appointmentMix, doctorRevenue, medicines, payments, revenueTrend } from "../../data/mockData";
+import { toast } from "sonner";
 import { StatsCard } from "../../components/common/StatsCard";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Card } from "../../components/common/Card";
 import { StatusPill } from "../../components/common/StatusPill";
+import { EmptyState } from "../../components/common/EmptyState";
+import { LoadingSkeleton } from "../../components/common/LoadingSkeleton";
+import { services } from "../../services/serviceProvider";
 import { formatCurrency } from "../../utils/formatCurrency";
+import type { AppointmentReport, DoctorPerformanceReport, FollowUpReport, PatientReport, RevenueReport } from "../../modules/billing/types";
+import type { DashboardSummary } from "../../services/interfaces";
+import type { Medicine } from "../../modules/pharmacy/types";
+import { toMedicineRows } from "../../modules/pharmacy/supabaseMappers";
+
+const statusColors: Record<string, string> = {
+  Completed: "#13969c",
+  Waiting: "#f0a202",
+  Booked: "#3b82f6",
+  Cancelled: "#e11d48",
+  "No show": "#94a3b8",
+};
+
+type AppointmentRow = { id: string; patientName: string; doctorName: string; time: string; status: string };
+type PaymentRow = { id: string; patientName: string; mode: string; amount: number };
+
 export default function OwnerDashboard() {
-  const stats = [
-    ["Today Revenue", "₹47,200", "+12.4% vs yesterday", CircleDollarSign, "teal"], ["Appointments", "38", "31 confirmed", CalendarCheck, "blue"],
-    ["Waiting Patients", "6", "Avg. wait 14 min", Clock3, "amber"], ["New Patients", "9", "24% of visits", UserPlus, "violet"],
-    ["Repeat Patients", "22", "58% retention", Users, "teal"], ["Pharmacy Sales", "₹12,840", "27 orders", Pill, "blue"],
-    ["Pending Payments", "₹6,450", "5 invoices", WalletCards, "amber"], ["Follow-ups Due", "11", "3 high priority", Waypoints, "violet"]
-  ] as const;
-  return <><PageHeader title="Good morning, Varun" description="Here’s how your clinic is doing today." action={<button className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-slate-700">1 Jul 2026</button>} />
+  const [loading, setLoading] = useState(true);
+  const [clinicName, setClinicName] = useState("");
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [revenue, setRevenue] = useState<RevenueReport | null>(null);
+  const [appointmentReport, setAppointmentReport] = useState<AppointmentReport | null>(null);
+  const [patientReport, setPatientReport] = useState<PatientReport | null>(null);
+  const [followUpReport, setFollowUpReport] = useState<FollowUpReport | null>(null);
+  const [doctorRevenue, setDoctorRevenue] = useState<DoctorPerformanceReport[]>([]);
+  const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [lowStock, setLowStock] = useState<Medicine[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const context = await services.auth.getCurrentAuthContext();
+        const [
+          nextSummary,
+          nextRevenue,
+          nextAppointmentReport,
+          nextPatientReport,
+          nextFollowUps,
+          nextDoctorRevenue,
+          todayAppointments,
+          medicines,
+          batches,
+        ] = await Promise.all([
+          services.reports.getDashboardSummary(),
+          services.reports.getRevenueSummary(),
+          services.reports.getAppointmentReport(),
+          services.reports.getPatientReport(),
+          services.reports.getFollowUpReport(),
+          services.reports.getDoctorPerformanceReport(),
+          services.appointments.getTodayAppointments(),
+          services.pharmacy.getMedicines({ status: "active" }),
+          services.pharmacy.getStockBatches(),
+        ]);
+
+        const [doctorRows, paymentRows] = await Promise.all([
+          services.doctor.getDoctorProfiles(),
+          services.billing.getManualPayments(),
+        ]);
+
+        // One lookup per entity type rather than one per row -- this loop used to be
+        // the bulk of the dashboard's request count.
+        const [patientNames, staffNames] = await Promise.all([
+          services.patients.getPatientNames([
+            ...todayAppointments.map((appointment) => appointment.patientId),
+            ...paymentRows.slice(0, 6).map((payment) => payment.patient_id),
+          ]),
+          services.users.getStaffNames(doctorRows.map((doctor) => doctor.staff_id)),
+        ]);
+
+        const doctorNames = new Map(
+          doctorRows.map((doctor): [string, string] => [
+            doctor.id,
+            staffNames.get(doctor.staff_id) ?? (doctor.specialization || doctor.department || "Doctor"),
+          ]),
+        );
+
+        if (!mounted) return;
+        setClinicName((context.clinic as { name?: string } | null)?.name ?? "your clinic");
+        setSummary(nextSummary);
+        setRevenue(nextRevenue);
+        setAppointmentReport(nextAppointmentReport);
+        setPatientReport(nextPatientReport);
+        setFollowUpReport(nextFollowUps);
+        setDoctorRevenue(nextDoctorRevenue.filter((doctor) => doctor.revenue > 0 || doctor.consultations > 0).slice(0, 6));
+        setAppointments(
+          todayAppointments.slice(0, 6).map((appointment) => ({
+            id: appointment.id,
+            patientName: patientNames.get(appointment.patientId) ?? "Patient",
+            doctorName: doctorNames.get(appointment.doctorId) ?? "Unassigned",
+            time: appointment.time || "-",
+            status: appointment.status,
+          })),
+        );
+        setPayments(
+          paymentRows.slice(0, 6).map((payment) => ({
+            id: payment.id.slice(0, 8).toUpperCase(),
+            patientName: patientNames.get(payment.patient_id) ?? "Patient",
+            mode: payment.payment_mode,
+            amount: payment.amount,
+          })),
+        );
+        setLowStock(toMedicineRows(medicines as never, batches).filter((medicine) => medicine.stockStatus === "low_stock" || medicine.stockStatus === "out_of_stock").slice(0, 5));
+      } catch (error) {
+        if (mounted) toast.error(error instanceof Error ? error.message : "Unable to load the owner dashboard.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => { mounted = false; };
+  }, []);
+
+  const appointmentMix = useMemo(() => {
+    if (!appointmentReport) return [];
+    const other = appointmentReport.total - appointmentReport.completed - appointmentReport.cancelled - appointmentReport.noShow;
+    return [
+      { name: "Completed", value: appointmentReport.completed },
+      { name: "Booked", value: Math.max(other, 0) },
+      { name: "Cancelled", value: appointmentReport.cancelled },
+      { name: "No show", value: appointmentReport.noShow },
+    ].filter((slice) => slice.value > 0);
+  }, [appointmentReport]);
+
+  const stats = useMemo(() => {
+    const waiting = appointments.filter((appointment) => ["waiting", "arrived"].includes(appointment.status)).length;
+    return [
+      ["Today Revenue", formatCurrency(summary?.revenueByDateRange ?? 0), `${summary?.totalInvoices ?? 0} invoices this period`, CircleDollarSign, "teal"],
+      ["Appointments", String(summary?.todayAppointments ?? 0), `${appointmentReport?.completed ?? 0} completed`, CalendarCheck, "blue"],
+      ["Waiting Patients", String(waiting), "In today's queue", Clock3, "amber"],
+      ["New Patients", String(patientReport?.newPatients ?? 0), `${patientReport?.sourceSplit.length ?? 0} sources`, UserPlus, "violet"],
+      ["Repeat Patients", String(patientReport?.repeatPatients ?? 0), `${summary?.totalPatients ?? 0} total patients`, Users, "teal"],
+      ["Pharmacy Sales", formatCurrency(revenue?.pharmacyRevenue ?? 0), `${summary?.pharmacyOrders ?? 0} orders`, Pill, "blue"],
+      ["Pending Payments", formatCurrency(summary?.pendingAmount ?? 0), "Awaiting collection", WalletCards, "amber"],
+      ["Follow-ups Due", String((followUpReport?.dueToday ?? 0) + (followUpReport?.overdue ?? 0)), `${followUpReport?.overdue ?? 0} overdue`, Waypoints, "violet"],
+    ] as const;
+  }, [appointmentReport, appointments, followUpReport, patientReport, revenue, summary]);
+
+  if (loading) return <main className="p-5 md:p-7"><LoadingSkeleton rows={6} /></main>;
+
+  const today = new Date().toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+  return <><PageHeader title="Clinic overview" description={`Here’s how ${clinicName} is doing today.`} action={<span className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-slate-700">{today}</span>} />
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{stats.map(([label, value, detail, icon, tone]) => <StatsCard key={label} label={label} value={value} detail={detail} icon={icon} tone={tone} />)}</div>
     <div className="mt-6 grid gap-5 xl:grid-cols-[1.55fr_1fr]">
-      <Card className="p-5"><div className="mb-5 flex items-center justify-between"><div><h2 className="font-bold">Revenue trend</h2><p className="text-xs text-slate-500">Daily collections this week</p></div><span className="text-sm font-bold text-emerald-600">+18.2%</span></div><div className="h-72"><ResponsiveContainer width="100%" height="100%"><AreaChart data={revenueTrend}><defs><linearGradient id="rev" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#13969c" stopOpacity={.25}/><stop offset="95%" stopColor="#13969c" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e9eef1" /><XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize:12}} /><YAxis axisLine={false} tickLine={false} tick={{fontSize:11}} tickFormatter={(v) => `${v/1000}k`} /><Tooltip formatter={(v) => formatCurrency(Number(v))} /><Area type="monotone" dataKey="revenue" stroke="#087f8c" strokeWidth={2.5} fill="url(#rev)" /></AreaChart></ResponsiveContainer></div></Card>
-      <Card className="p-5"><h2 className="font-bold">Appointment status</h2><p className="text-xs text-slate-500">Today’s patient flow</p><div className="h-52"><ResponsiveContainer><PieChart><Pie data={appointmentMix} dataKey="value" innerRadius={55} outerRadius={80} paddingAngle={3}>{appointmentMix.map((x) => <Cell key={x.name} fill={x.fill} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></div><div className="grid grid-cols-2 gap-3">{appointmentMix.map((x) => <div className="flex items-center justify-between text-xs" key={x.name}><span className="flex items-center gap-2 text-slate-500"><i className="size-2 rounded-full" style={{background:x.fill}} />{x.name}</span><b>{x.value}</b></div>)}</div></Card>
+      <Card className="p-5"><div className="mb-5 flex items-center justify-between"><div><h2 className="font-bold">Revenue trend</h2><p className="text-xs text-slate-500">Collections recorded this period</p></div><span className="text-sm font-bold text-emerald-600">{formatCurrency(revenue?.totalRevenue ?? 0)}</span></div>
+        {revenue && revenue.trend.length > 0 ? <div className="h-72"><ResponsiveContainer width="100%" height="100%"><AreaChart data={revenue.trend}><defs><linearGradient id="rev" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#13969c" stopOpacity={.25}/><stop offset="95%" stopColor="#13969c" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e9eef1" /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize:12}} /><YAxis axisLine={false} tickLine={false} tick={{fontSize:11}} tickFormatter={(v) => `${Number(v)/1000}k`} /><Tooltip formatter={(v) => formatCurrency(Number(v))} /><Area type="monotone" dataKey="revenue" stroke="#087f8c" strokeWidth={2.5} fill="url(#rev)" /></AreaChart></ResponsiveContainer></div> : <EmptyState title="No collections yet" description="Recorded payments will appear here." />}
+      </Card>
+      <Card className="p-5"><h2 className="font-bold">Appointment status</h2><p className="text-xs text-slate-500">Appointment mix for this period</p>
+        {appointmentMix.length > 0 ? <><div className="h-52"><ResponsiveContainer><PieChart><Pie data={appointmentMix} dataKey="value" innerRadius={55} outerRadius={80} paddingAngle={3}>{appointmentMix.map((slice) => <Cell key={slice.name} fill={statusColors[slice.name] ?? "#94a3b8"} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer></div><div className="grid grid-cols-2 gap-3">{appointmentMix.map((slice) => <div className="flex items-center justify-between text-xs" key={slice.name}><span className="flex items-center gap-2 text-slate-500"><i className="size-2 rounded-full" style={{background: statusColors[slice.name] ?? "#94a3b8"}} />{slice.name}</span><b>{slice.value}</b></div>)}</div></> : <EmptyState title="No appointments yet" description="Booked appointments will appear here." />}
+      </Card>
     </div>
     <div className="mt-5 grid gap-5 xl:grid-cols-2">
-      <Card className="overflow-hidden"><div className="flex items-center justify-between p-5"><div><h2 className="font-bold">Today’s appointments</h2><p className="text-xs text-slate-500">Next patients across all doctors</p></div><button className="text-sm font-semibold text-brand-700">View all</button></div><div className="table-wrap"><table className="data-table"><thead><tr><th>Patient</th><th>Doctor</th><th>Time</th><th>Status</th></tr></thead><tbody>{appointments.map((a) => <tr key={a.id}><td className="font-semibold">{a.patientName}</td><td className="text-slate-500">{a.doctorName}</td><td>{a.time}</td><td><StatusPill status={a.status} /></td></tr>)}</tbody></table></div></Card>
-      <Card className="p-5"><h2 className="font-bold">Doctor-wise revenue</h2><p className="text-xs text-slate-500">Collections for the current month</p><div className="mt-4 h-64"><ResponsiveContainer><BarChart data={doctorRevenue} layout="vertical" margin={{left:10}}><CartesianGrid horizontal={false} stroke="#edf1f3" /><XAxis type="number" hide /><YAxis dataKey="name" type="category" width={70} axisLine={false} tickLine={false} tick={{fontSize:11}} /><Tooltip formatter={(v) => formatCurrency(Number(v))}/><Bar dataKey="value" fill="#13969c" radius={[0,8,8,0]} barSize={22}/></BarChart></ResponsiveContainer></div></Card>
-      <Card className="overflow-hidden"><div className="p-5"><h2 className="font-bold">Recent payments</h2><p className="text-xs text-slate-500">Latest clinic collections</p></div><div className="table-wrap"><table className="data-table"><thead><tr><th>Invoice</th><th>Patient</th><th>Mode</th><th>Amount</th></tr></thead><tbody>{payments.map((p) => <tr key={p.id}><td className="text-slate-500">{p.id}</td><td className="font-semibold">{p.patientName}</td><td>{p.mode}</td><td className="font-bold">{formatCurrency(p.amount)}</td></tr>)}</tbody></table></div></Card>
-      <Card className="overflow-hidden"><div className="p-5"><h2 className="font-bold">Low stock medicines</h2><p className="text-xs text-slate-500">Items below reorder level</p></div>{medicines.map((m) => <div key={m.id} className="flex items-center justify-between border-t px-5 py-4"><div><p className="text-sm font-semibold">{m.name}</p><p className="text-xs text-slate-500">{m.category} · Exp. {m.expiry}</p></div><div className="text-right"><p className="text-sm font-bold text-rose-600">{m.stock} left</p><p className="text-xs text-slate-400">Min {m.reorderLevel}</p></div></div>)}</Card>
+      <Card className="overflow-hidden"><div className="flex items-center justify-between p-5"><div><h2 className="font-bold">Today’s appointments</h2><p className="text-xs text-slate-500">Next patients across all doctors</p></div><Link className="text-sm font-semibold text-brand-700" to="/reception/appointments">View all</Link></div>
+        {appointments.length > 0 ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Patient</th><th>Doctor</th><th>Time</th><th>Status</th></tr></thead><tbody>{appointments.map((appointment) => <tr key={appointment.id}><td className="font-semibold">{appointment.patientName}</td><td className="text-slate-500">{appointment.doctorName}</td><td>{appointment.time}</td><td><StatusPill status={appointment.status} /></td></tr>)}</tbody></table></div> : <div className="p-5"><EmptyState title="No appointments today" description="New bookings will show up here." /></div>}
+      </Card>
+      <Card className="p-5"><h2 className="font-bold">Doctor-wise revenue</h2><p className="text-xs text-slate-500">Collections attributed to each doctor</p>
+        {doctorRevenue.length > 0 ? <div className="mt-4 h-64"><ResponsiveContainer><BarChart data={doctorRevenue} layout="vertical" margin={{left:10}}><CartesianGrid horizontal={false} stroke="#edf1f3" /><XAxis type="number" hide /><YAxis dataKey="doctorName" type="category" width={90} axisLine={false} tickLine={false} tick={{fontSize:11}} /><Tooltip formatter={(v) => formatCurrency(Number(v))}/><Bar dataKey="revenue" fill="#13969c" radius={[0,8,8,0]} barSize={22}/></BarChart></ResponsiveContainer></div> : <EmptyState title="No doctor revenue yet" description="Paid invoices linked to consultations will appear here." />}
+      </Card>
+      <Card className="overflow-hidden"><div className="p-5"><h2 className="font-bold">Recent payments</h2><p className="text-xs text-slate-500">Latest clinic collections</p></div>
+        {payments.length > 0 ? <div className="table-wrap"><table className="data-table"><thead><tr><th>Reference</th><th>Patient</th><th>Mode</th><th>Amount</th></tr></thead><tbody>{payments.map((payment) => <tr key={payment.id}><td className="text-slate-500">{payment.id}</td><td className="font-semibold">{payment.patientName}</td><td className="uppercase">{payment.mode}</td><td className="font-bold">{formatCurrency(payment.amount)}</td></tr>)}</tbody></table></div> : <div className="p-5"><EmptyState title="No payments recorded" description="Collected payments will appear here." /></div>}
+      </Card>
+      <Card className="overflow-hidden"><div className="p-5"><h2 className="font-bold">Low stock medicines</h2><p className="text-xs text-slate-500">Items at or below reorder level</p></div>
+        {lowStock.length > 0 ? lowStock.map((medicine) => <div key={medicine.id} className="flex items-center justify-between border-t px-5 py-4"><div><p className="text-sm font-semibold">{medicine.name}</p><p className="text-xs text-slate-500">{medicine.category}{medicine.expiryDate ? ` · Exp. ${medicine.expiryDate}` : ""}</p></div><div className="text-right"><p className="text-sm font-bold text-rose-600">{medicine.currentStock} left</p><p className="text-xs text-slate-400">Min {medicine.reorderLevel}</p></div></div>) : <div className="p-5"><EmptyState title="Stock levels are healthy" description="Medicines below their reorder level will appear here." /></div>}
+      </Card>
     </div>
   </>;
 }

@@ -1,5 +1,6 @@
 import type { ConsultationRecord, DoctorAvailabilityRecord, PrescriptionRecord, ReminderRecord } from "../../shared/types/domain";
 import type { Tables, TablesInsert, TablesUpdate } from "../../shared/types/database.types";
+import type { FollowUp, MedicineReminderSchedule, PatientProfile, PatientTimelineItem, Prescription } from "../../modules/doctor/types";
 
 export type ConsultationFilters = {
   clinicId?: string;
@@ -66,4 +67,14 @@ export interface DoctorDomainService {
   createMedicineReminderSchedule(input: TablesInsert<"medicine_reminders">): Promise<Tables<"medicine_reminders">>;
   updateReminderStatus(id: string, status: string): Promise<Tables<"medicine_reminders">>;
   getReminders(patientId?: string): Promise<ReminderRecord[]>;
+  /** Clinical follow-ups derived from completed consultations that carry a follow-up date. */
+  getFollowUps(doctorId?: string): Promise<FollowUp[]>;
+  /** Active medicine reminders grouped per patient for the reminders screen. */
+  getMedicineReminderSchedules(doctorId?: string): Promise<MedicineReminderSchedule[]>;
+  /** Patient snapshot enriched with visit counts, allergies and pending balance. */
+  getPatientProfile(patientId: string): Promise<PatientProfile>;
+  /** Visit history for the patient history panel. */
+  getPatientTimeline(patientId: string): Promise<PatientTimelineItem[]>;
+  /** Past prescriptions rendered in the patient history panel. */
+  getPatientPrescriptionHistory(patientId: string): Promise<Prescription[]>;
 }
