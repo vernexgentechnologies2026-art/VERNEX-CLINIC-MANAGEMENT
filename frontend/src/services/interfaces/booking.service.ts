@@ -5,6 +5,7 @@ import type {
   BookingService as BookingServiceOption,
   BookingStatusResult,
   ClinicBookingProfile,
+  ClinicDirectoryEntry,
   PatientBookingInput,
   PaymentOption,
 } from "../../modules/patient-booking/types";
@@ -32,6 +33,7 @@ export type PublicBookingResult = BookingStatusResult & {
  * that it also works for an anonymous visitor on /book/:clinicSlug.
  */
 export interface PublicBookingService {
+  getPublishedClinics(): Promise<ClinicDirectoryEntry[]>;
   getClinicProfile(clinicSlug: string): Promise<ClinicBookingProfile>;
   getDoctors(clinicSlug: string): Promise<BookingDoctor[]>;
   getServices(clinicSlug: string): Promise<BookingServiceOption[]>;
