@@ -7,6 +7,7 @@ import type {
   BookingService,
   BookingStatusResult,
   ClinicBookingProfile,
+  ClinicDirectoryEntry,
 } from "../../modules/patient-booking/types";
 import type { CreatePublicBookingInput, PublicBookingResult, PublicBookingService } from "../interfaces";
 
@@ -33,6 +34,7 @@ const num = (row: Row, key: string, fallback = 0) => {
 const bool = (row: Row, key: string) => row[key] === true;
 
 type PublicBookingRpc =
+  | "public_published_clinics"
   | "public_clinic_booking_profile"
   | "public_clinic_doctors"
   | "public_clinic_services"
@@ -49,6 +51,18 @@ async function callRpc(name: PublicBookingRpc, args: Record<string, unknown>): P
 }
 
 export const supabaseBookingService: PublicBookingService = {
+  async getPublishedClinics() {
+    return asArray(await callRpc("public_published_clinics", {})).map((row): ClinicDirectoryEntry => ({
+      id: text(row, "id"),
+      slug: text(row, "slug"),
+      name: text(row, "name"),
+      specialization: text(row, "specialization"),
+      address: text(row, "address"),
+      phone: text(row, "phone"),
+      logoUrl: text(row, "logoUrl"),
+    }));
+  },
+
   async getClinicProfile(clinicSlug) {
     const row = asObject(await callRpc("public_clinic_booking_profile", { clinic_slug: clinicSlug }));
     if (!row) throw new Error(`No clinic is published at /book/${clinicSlug}.`);

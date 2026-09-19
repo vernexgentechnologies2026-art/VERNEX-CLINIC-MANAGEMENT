@@ -38,6 +38,7 @@ const BillingReceipts = lazy(() => import("../modules/billing/pages/Receipts"));
 const BillingPendingPayments = lazy(() => import("../modules/billing/pages/PendingPayments"));
 const BillingRefunds = lazy(() => import("../modules/billing/pages/Refunds"));
 const BillingReports = lazy(() => import("../modules/billing/pages/Reports"));
+const ClinicDirectory = lazy(() => import("../modules/patient-booking/pages/ClinicDirectory"));
 const ClinicBookingPage = lazy(() => import("../modules/patient-booking/pages/ClinicBookingPage"));
 const BookingFlow = lazy(() => import("../modules/patient-booking/pages/BookingFlow"));
 const AppointmentSuccess = lazy(() => import("../modules/patient-booking/pages/AppointmentSuccess"));
@@ -63,6 +64,7 @@ export default function AppRoutes() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/book" element={<ClinicDirectory />} />
         <Route path="/book/:clinicSlug" element={<ClinicBookingPage />} />
         <Route path="/book/:clinicSlug/flow" element={<BookingFlow />} />
         <Route path="/book/:clinicSlug/success" element={<AppointmentSuccess />} />

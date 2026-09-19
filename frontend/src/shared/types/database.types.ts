@@ -3848,6 +3848,10 @@ export type Database = {
         Args: { clinic_slug: string }
         Returns: Json
       }
+      public_published_clinics: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       public_clinic_doctors: { Args: { clinic_slug: string }; Returns: Json }
       public_clinic_services: { Args: { clinic_slug: string }; Returns: Json }
       public_create_booking: { Args: { input: Json }; Returns: Json }

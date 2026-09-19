@@ -4,6 +4,7 @@ export type PaymentOption = "pay_at_clinic" | "pay_online";
 export type BookingStatus = "confirmed" | "pending" | "cancelled" | "completed";
 
 export type ClinicBookingProfile = { id: string; slug: string; name: string; specialization: string; address: string; phone: string; whatsapp: string; hours: string; mapUrl: string; bookingUrl: string };
+export type ClinicDirectoryEntry = { id: string; slug: string; name: string; specialization: string; address: string; phone: string; logoUrl: string };
 export type BookingDoctor = { id: string; name: string; specialization: string; experience: number; qualification: string; availableToday: boolean; consultationFee: number };
 export type BookingService = { id: string; name: string; duration: string; price: number; description: string };
 export type AvailableDate = { id: string; label: string; date: string; available: boolean };
